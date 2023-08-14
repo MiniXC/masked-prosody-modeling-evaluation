@@ -13,18 +13,18 @@ class TrainingArgs:
     wandb_mode: str = "offline"
     wandb_project: str = None
     wandb_dir: str = "wandb"
-    train_split: str = "train"
-    val_split: str = "test"
-    n_steps: int = 10000
+    train_split: str = "train[:90%]"
+    val_split: str = "train[90%:]"
+    n_steps: int = 2000
     batch_size: int = 32
     seed: int = 0
-    dataset: str = "mnist"
-    log_every_n_steps: int = 100
+    dataset: str = "cdminix/bu_radio"
+    log_every_n_steps: int = 10
     do_full_eval: bool = True
-    do_save: bool = True
+    do_save: bool = False
     save_onnx: bool = False
     eval_only: bool = False
-    eval_every_n_steps: int = 1000
+    eval_every_n_steps: int = 100
     save_every_n_steps: int = 1000
     push_to_hub: bool = False
     hub_repo: str = None
@@ -32,12 +32,18 @@ class TrainingArgs:
 
 @dataclass
 class CollatorArgs:
-    normalize: bool = True
-    onehot: bool = True
+    overwrite: bool = False
+    max_words: int = 256
     name: str = "default"
+    vocex: str = "cdminix/vocex"
+    vocex_fp16: bool = False
 
 
 @dataclass
 class ModelArgs:
     n_layers: int = 4
     hidden_dim: int = 512
+    measures: str = "pitch,energy,voice_activity_binary"
+    values_per_word: int = 10
+    type: str = "mlp"  # can be "mlp" or "transformer"
+    dropout: float = 0.1

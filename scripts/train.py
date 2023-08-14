@@ -21,11 +21,7 @@ from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_sc
 from tqdm.auto import tqdm
 import yaml
 from rich.console import Console
-
-# dataframes and plotting
-# import seaborn as sns
-# import matplotlib.pyplot as plt
-# import pandas as pd
+import matplotlib.pyplot as plt
 
 console = Console()
 
@@ -33,23 +29,30 @@ console = Console()
 from configs.args import TrainingArgs, ModelArgs, CollatorArgs
 from configs.validation import validate_args
 from util.remote import wandb_update_config, wandb_init, push_to_hub
-from model.simple_mlp import SimpleMLP
+from util.plotting import plot_baseline_batch
+from model.classifiers import BreakProminenceClassifier
 from collators import get_collator
 
 
 def print_and_draw_model():
-    dummy_shape = list(model.dummy_input.shape)
-    dummy_shape[0] = training_args.batch_size
-    dummy_shape = tuple(dummy_shape)
-    console_print(f"[green]input shape[/green]: {dummy_shape}")
-    model_summary = summary(model, input_size=dummy_shape, verbose=0)
+    dummy_input = model.dummy_input
+    # repeat dummy input to match batch size (regardless of how many dimensions)
+    dummy_input = dummy_input.repeat(
+        (training_args.batch_size,) + (1,) * (len(dummy_input.shape) - 1)
+    )
+    console_print(f"[green]input shape[/green]: {dummy_input.shape}")
+    model_summary = summary(
+        model,
+        input_data=dummy_input,
+        verbose=0,
+        col_names=[
+            "input_size",
+            "output_size",
+            "num_params",
+        ],
+    )
     console_print(model_summary)
     if accelerator.is_main_process:
-        dummy_input = model.dummy_input
-        # repeat dummy input to match batch size (regardless of how many dimensions)
-        dummy_input = dummy_input.repeat(
-            (training_args.batch_size,) + (1,) * (len(dummy_input.shape) - 1)
-        )
         model_graph = draw_graph(
             model, input_data=dummy_input, save_graph=True, directory="figures/"
         )
@@ -108,13 +111,39 @@ def train_epoch(epoch):
     global global_step
     model.train()
     losses = deque(maxlen=training_args.log_every_n_steps)
+    break_losses = deque(maxlen=training_args.log_every_n_steps)
+    prom_losses = deque(maxlen=training_args.log_every_n_steps)
     step = 0
     console_rule(f"Epoch {epoch}")
     last_loss = None
     for batch in train_dl:
         with accelerator.accumulate(model):
-            y = model(batch["image"])
-            loss = torch.nn.functional.cross_entropy(y, batch["target"])
+            x = torch.cat(
+                [batch["measures"][m] for m in model_args.measures.split(",")], dim=-1
+            )
+            y = model(x)
+            prom_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                y[:, :, 0], batch["prominence"].float(), reduction="none"
+            )
+            break_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                y[:, :, 1], batch["break"].float(), reduction="none"
+            )
+            mask_len = batch["mask"].shape[-1]
+            prom_loss *= batch["mask"]
+            break_loss *= batch["mask"]
+            prom_loss = (
+                prom_loss.sum()
+                * (batch["mask"].sum() / mask_len)
+                / prom_loss.shape[-1]
+                / prom_loss.shape[0]
+            )
+            break_loss = (
+                break_loss.sum()
+                * (batch["mask"].sum() / mask_len)
+                / break_loss.shape[-1]
+                / break_loss.shape[0]
+            )
+            loss = (break_loss + prom_loss) / 2
             accelerator.backward(loss)
             accelerator.clip_grad_norm_(
                 model.parameters(), training_args.gradient_clip_val
@@ -123,13 +152,23 @@ def train_epoch(epoch):
             scheduler.step()
             optimizer.zero_grad()
         losses.append(loss.detach())
+        break_losses.append(break_loss.detach())
+        prom_losses.append(prom_loss.detach())
         if (
             step > 0
             and step % training_args.log_every_n_steps == 0
             and accelerator.is_main_process
         ):
             last_loss = torch.mean(torch.tensor(losses)).item()
-            wandb_log("train", {"loss": last_loss}, print_log=False)
+            wandb_log(
+                "train",
+                {
+                    "loss": last_loss,
+                    "break_loss": torch.mean(torch.tensor(break_losses)).item(),
+                    "prom_loss": torch.mean(torch.tensor(prom_losses)).item(),
+                },
+                print_log=False,
+            )
         if (
             training_args.do_save
             and global_step > 0
@@ -159,35 +198,108 @@ def train_epoch(epoch):
 
 def evaluate():
     model.eval()
-    y_true = []
-    y_pred = []
+    y_true_prom = []
+    y_pred_prom = []
+    y_true_break = []
+    y_pred_break = []
     losses = []
+    prom_losses = []
+    break_losses = []
     console_rule("Evaluation")
-    for batch in val_dl:
-        y = model(batch["image"])
-        loss = torch.nn.functional.cross_entropy(y, batch["target"])
-        losses.append(loss.detach())
-        y_true.append(batch["target"].cpu().numpy())
-        y_pred.append(y.argmax(-1).cpu().numpy())
-    y_true = np.concatenate(y_true)
-    y_pred = np.concatenate(y_pred)
-    wandb_log("val", {"loss": torch.mean(torch.tensor(losses)).item()})
-    acc = accuracy_score(y_true, y_pred)
-    f1 = f1_score(y_true, y_pred, average="macro")
-    precision = precision_score(y_true, y_pred, average="macro", zero_division=0)
-    recall = recall_score(y_true, y_pred, average="macro")
-    wandb_log("val", {"acc": acc, "f1": f1, "precision": precision, "recall": recall})
+    with torch.no_grad():
+        for batch in val_dl:
+            x = torch.cat(
+                [batch["measures"][m] for m in model_args.measures.split(",")], dim=-1
+            )
+            y = model(x)
+            prom_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                y[:, :, 0], batch["prominence"].float(), reduction="none"
+            )
+            break_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                y[:, :, 1], batch["break"].float(), reduction="none"
+            )
+            mask_len = batch["mask"].shape[-1]
+            prom_loss *= batch["mask"]
+            break_loss *= batch["mask"]
+            prom_loss = (
+                prom_loss.sum() / (batch["mask"].sum() / mask_len) / prom_loss.shape[-1]
+            )
+            break_loss = (
+                break_loss.sum()
+                / (batch["mask"].sum() / mask_len)
+                / break_loss.shape[-1]
+            )
+            loss = (break_loss + prom_loss) / 2
+            losses.append(loss.detach())
+            break_losses.append(break_loss.detach())
+            prom_losses.append(prom_loss.detach())
+            y_true_prom.append(batch["prominence"].flatten())
+            y_pred_prom.append(torch.sigmoid(y[:, :, 0]).flatten())
+            y_true_break.append(batch["break"].flatten())
+            y_pred_break.append(torch.sigmoid(y[:, :, 1]).flatten())
+    y_true_prom = torch.cat(y_true_prom).cpu().numpy()
+    y_pred_prom = torch.round(torch.cat(y_pred_prom)).cpu().numpy()
+    y_true_break = torch.cat(y_true_break).cpu().numpy()
+    y_pred_break = torch.round(torch.cat(y_pred_break)).cpu().numpy()
+    wandb_log(
+        "val",
+        {
+            "loss": torch.mean(torch.tensor(losses)).item(),
+            "break_loss": torch.mean(torch.tensor(break_losses)).item(),
+            "prom_loss": torch.mean(torch.tensor(prom_losses)).item(),
+            "prom_acc": accuracy_score(y_true_prom, y_pred_prom),
+            "prom_f1": f1_score(y_true_prom, y_pred_prom),
+            "prom_precision": precision_score(y_true_prom, y_pred_prom),
+            "prom_recall": recall_score(y_true_prom, y_pred_prom),
+            "break_acc": accuracy_score(y_true_break, y_pred_break),
+            "break_f1": f1_score(y_true_break, y_pred_break),
+            "break_precision": precision_score(y_true_break, y_pred_break),
+            "break_recall": recall_score(y_true_break, y_pred_break),
+        },
+    )
 
 
 def evaluate_loss_only():
     model.eval()
     losses = []
+    prom_losses = []
+    break_losses = []
     console_rule("Evaluation")
-    for batch in val_dl:
-        y = model(batch["image"])
-        loss = torch.nn.functional.cross_entropy(y, batch["target"])
-        losses.append(loss.detach())
-    wandb_log("val", {"loss": torch.mean(torch.tensor(losses)).item()})
+    with torch.no_grad():
+        for batch in val_dl:
+            x = torch.cat(
+                [batch["measures"][m] for m in model_args.measures.split(",")], dim=-1
+            )
+            y = model(x)
+            prom_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                y[:, :, 0], batch["prominence"].float(), reduction="none"
+            )
+            break_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                y[:, :, 1], batch["break"].float(), reduction="none"
+            )
+            mask_len = batch["mask"].shape[-1]
+            prom_loss *= batch["mask"]
+            break_loss *= batch["mask"]
+            prom_loss = (
+                prom_loss.sum() / (batch["mask"].sum() / mask_len) / prom_loss.shape[-1]
+            )
+            break_loss = (
+                break_loss.sum()
+                / (batch["mask"].sum() / mask_len)
+                / break_loss.shape[-1]
+            )
+            loss = (break_loss + prom_loss) / 2
+            losses.append(loss.detach())
+            break_losses.append(break_loss.detach())
+            prom_losses.append(prom_loss.detach())
+    wandb_log(
+        "val",
+        {
+            "loss": torch.mean(torch.tensor(losses)).item(),
+            "break_loss": torch.mean(torch.tensor(break_losses)).item(),
+            "prom_loss": torch.mean(torch.tensor(prom_losses)).item(),
+        },
+    )
 
 
 def main():
@@ -260,6 +372,8 @@ def main():
                 "model": model_args,
             }
         )
+    collator_args.values_per_word = model_args.values_per_word
+    collator_args.measures = model_args.measures
     validate_args(training_args, model_args, collator_args)
 
     # Distribution Information
@@ -269,11 +383,9 @@ def main():
     console_print(f"[green]process_index[/green]: {accelerator.process_index}")
 
     # model
-    model = SimpleMLP(model_args)
+    model = BreakProminenceClassifier(model_args)
     console_rule("Model")
     print_and_draw_model()
-
-    collator = get_collator(collator_args)
 
     # dataset
     console_rule("Dataset")
@@ -287,6 +399,8 @@ def main():
 
     console_print(f"[green]train[/green]: {len(train_ds)}")
     console_print(f"[green]val[/green]: {len(val_ds)}")
+
+    collator = get_collator(collator_args)
 
     # dataloader
     train_dl = DataLoader(
@@ -303,6 +417,21 @@ def main():
         shuffle=False,
         collate_fn=collator,
     )
+
+    if collator_args.overwrite:
+        console_print(f"[yellow]WARNING[/yellow]: overwriting features")
+    if accelerator.is_main_process:
+        console_print(f"[green]collator[/green]: doing test run over datasets")
+        is_first_batch = True
+        for dl in [train_dl, val_dl]:
+            for batch in tqdm(dl, total=len(dl)):
+                if is_first_batch:
+                    if collator_args.name == "default":
+                        fig = plot_baseline_batch(batch, collator_args)
+                        plt.savefig("figures/first_batch.png")
+                    wandb.log({"first_batch": wandb.Image(fig)})
+                    is_first_batch = False
+    collator.args.overwrite = False
 
     # optimizer
     optimizer = torch.optim.AdamW(model.parameters(), lr=training_args.lr)

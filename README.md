@@ -15,3 +15,9 @@ The following updates automatically every time ``scripts/train.py`` is run.
 <summary>Click to expand</summary>
 <img src="./figures/model.gv.png"></img>
 </details>
+
+## first training batch
+<details>
+<summary>Click to expand</summary>
+<img src="./figures/first_batch.png"></img>
+</details>

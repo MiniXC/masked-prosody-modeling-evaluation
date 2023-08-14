@@ -4,7 +4,7 @@ from .args import TrainingArgs, ModelArgs, CollatorArgs
 def validate_args(*args):
     for arg in args:
         if isinstance(arg, TrainingArgs):
-            if arg.dataset not in ["mnist"]:
+            if arg.dataset not in ["cdminix/bu_radio"]:
                 raise ValueError(f"dataset {arg.dataset} not supported")
             if arg.lr_schedule not in ["linear_with_warmup"]:
                 raise ValueError(f"lr_schedule {arg.lr_schedule} not supported")
@@ -22,3 +22,11 @@ def validate_args(*args):
         if isinstance(arg, CollatorArgs):
             if arg.name not in ["default"]:
                 raise ValueError(f"collator {arg.name} not supported")
+            for measure in arg.measures.split(","):
+                if measure not in [
+                    "pitch",
+                    "energy",
+                    "duration",
+                    "voice_activity_binary",
+                ]:
+                    raise ValueError(f"measure {measure} not supported")

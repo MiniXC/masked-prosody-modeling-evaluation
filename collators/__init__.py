@@ -1,13 +1,13 @@
 import yaml
 
-from .default import MNISTCollator
+from .collators import BaselineBURNCollator
 from configs.args import CollatorArgs
 import torch
 
 
 def get_collator(args: CollatorArgs):
     return {
-        "default": MNISTCollator,
+        "default": BaselineBURNCollator,
     }[
         args.name
     ](args)
