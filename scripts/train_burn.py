@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 console = Console()
 
 # local imports
-from configs.args import TrainingArgs, ModelArgs, BURNCollatorArgs as CollatorArgs
+from configs.args import TrainingArgs, BURNModelArgs, BURNCollatorArgs as CollatorArgs
 from configs.validation import validate_args
 from util.remote import wandb_update_config, wandb_init, push_to_hub
 from util.plotting import plot_baseline_burn_batch as plot_baseline_batch
@@ -307,7 +307,7 @@ def main():
 
     global_step = 0
 
-    parser = HfArgumentParser([TrainingArgs, ModelArgs, CollatorArgs])
+    parser = HfArgumentParser([TrainingArgs, BURNModelArgs, CollatorArgs])
 
     accelerator = Accelerator()
 
@@ -408,7 +408,7 @@ def main():
         batch_size=training_args.batch_size,
         shuffle=True,
         collate_fn=collator,
-        drop_last=True,
+        drop_last=training_args.drop_last,
     )
 
     val_dl = DataLoader(

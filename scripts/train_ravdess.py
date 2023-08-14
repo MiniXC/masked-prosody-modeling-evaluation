@@ -26,11 +26,15 @@ import matplotlib.pyplot as plt
 console = Console()
 
 # local imports
-from configs.args import TrainingArgs, ModelArgs, RAVDESSCollatorArgs as CollatorArgs
+from configs.args import (
+    TrainingArgs,
+    RAVDESSModelArgs as ModelArgs,
+    RAVDESSCollatorArgs as CollatorArgs,
+)
 from configs.validation import validate_args
 from util.remote import wandb_update_config, wandb_init, push_to_hub
 from util.plotting import plot_baseline_ravdess_batch as plot_baseline_batch
-from model.burn_classifiers import BreakProminenceClassifier
+from model.ravdess_classifiers import EmotionClassifier
 from collators import get_collator
 
 
@@ -175,63 +179,39 @@ def train_epoch(epoch):
 
 def evaluate():
     model.eval()
-    y_true_prom = []
-    y_pred_prom = []
-    y_true_break = []
-    y_pred_break = []
     losses = []
-    prom_losses = []
-    break_losses = []
+    y_true = []
+    y_pred = []
     console_rule("Evaluation")
     with torch.no_grad():
         for batch in val_dl:
             x = torch.cat(
-                [batch["measures"][m] for m in model_args.measures.split(",")], dim=-1
+                [
+                    batch["measures"][m].unsqueeze(-1)
+                    for m in model_args.measures.split(",")
+                ],
+                dim=-1,
             )
             y = model(x)
-            prom_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-                y[:, :, 0], batch["prominence"].float(), reduction="none"
-            )
-            break_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-                y[:, :, 1], batch["break"].float(), reduction="none"
-            )
-            mask_len = batch["mask"].shape[-1]
-            prom_loss *= batch["mask"]
-            break_loss *= batch["mask"]
-            prom_loss = (
-                prom_loss.sum() / (batch["mask"].sum() / mask_len) / prom_loss.shape[-1]
-            )
-            break_loss = (
-                break_loss.sum()
-                / (batch["mask"].sum() / mask_len)
-                / break_loss.shape[-1]
-            )
-            loss = (break_loss + prom_loss) / 2
+            loss = torch.nn.functional.cross_entropy(y, batch["emotion_onehot"])
             losses.append(loss.detach())
-            break_losses.append(break_loss.detach())
-            prom_losses.append(prom_loss.detach())
-            y_true_prom.append(batch["prominence"].flatten())
-            y_pred_prom.append(torch.sigmoid(y[:, :, 0]).flatten())
-            y_true_break.append(batch["break"].flatten())
-            y_pred_break.append(torch.sigmoid(y[:, :, 1]).flatten())
-    y_true_prom = torch.cat(y_true_prom).cpu().numpy()
-    y_pred_prom = torch.round(torch.cat(y_pred_prom)).cpu().numpy()
-    y_true_break = torch.cat(y_true_break).cpu().numpy()
-    y_pred_break = torch.round(torch.cat(y_pred_break)).cpu().numpy()
+            y_true.append(batch["emotion"])
+            y_pred.append(torch.argmax(y, dim=-1))
+    loss = torch.mean(torch.tensor(losses)).item()
+    y_true = torch.cat(y_true).cpu().numpy()
+    y_pred = torch.cat(y_pred).cpu().numpy()
+    acc = accuracy_score(y_true, y_pred)
+    f1 = f1_score(y_true, y_pred, average="macro")
+    precision = precision_score(y_true, y_pred, average="macro")
+    recall = recall_score(y_true, y_pred, average="macro")
     wandb_log(
         "val",
         {
-            "loss": torch.mean(torch.tensor(losses)).item(),
-            "break_loss": torch.mean(torch.tensor(break_losses)).item(),
-            "prom_loss": torch.mean(torch.tensor(prom_losses)).item(),
-            "prom_acc": accuracy_score(y_true_prom, y_pred_prom),
-            "prom_f1": f1_score(y_true_prom, y_pred_prom),
-            "prom_precision": precision_score(y_true_prom, y_pred_prom),
-            "prom_recall": recall_score(y_true_prom, y_pred_prom),
-            "break_acc": accuracy_score(y_true_break, y_pred_break),
-            "break_f1": f1_score(y_true_break, y_pred_break),
-            "break_precision": precision_score(y_true_break, y_pred_break),
-            "break_recall": recall_score(y_true_break, y_pred_break),
+            "loss": loss,
+            "acc": acc,
+            "f1": f1,
+            "precision": precision,
+            "recall": recall,
         },
     )
 
@@ -239,42 +219,24 @@ def evaluate():
 def evaluate_loss_only():
     model.eval()
     losses = []
-    prom_losses = []
-    break_losses = []
     console_rule("Evaluation")
     with torch.no_grad():
         for batch in val_dl:
             x = torch.cat(
-                [batch["measures"][m] for m in model_args.measures.split(",")], dim=-1
+                [
+                    batch["measures"][m].unsqueeze(-1)
+                    for m in model_args.measures.split(",")
+                ],
+                dim=-1,
             )
             y = model(x)
-            prom_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-                y[:, :, 0], batch["prominence"].float(), reduction="none"
-            )
-            break_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-                y[:, :, 1], batch["break"].float(), reduction="none"
-            )
-            mask_len = batch["mask"].shape[-1]
-            prom_loss *= batch["mask"]
-            break_loss *= batch["mask"]
-            prom_loss = (
-                prom_loss.sum() / (batch["mask"].sum() / mask_len) / prom_loss.shape[-1]
-            )
-            break_loss = (
-                break_loss.sum()
-                / (batch["mask"].sum() / mask_len)
-                / break_loss.shape[-1]
-            )
-            loss = (break_loss + prom_loss) / 2
+            loss = torch.nn.functional.cross_entropy(y, batch["emotion_onehot"])
             losses.append(loss.detach())
-            break_losses.append(break_loss.detach())
-            prom_losses.append(prom_loss.detach())
+    loss = torch.mean(torch.tensor(losses)).item()
     wandb_log(
         "val",
         {
-            "loss": torch.mean(torch.tensor(losses)).item(),
-            "break_loss": torch.mean(torch.tensor(break_losses)).item(),
-            "prom_loss": torch.mean(torch.tensor(prom_losses)).item(),
+            "loss": loss,
         },
     )
 
@@ -349,7 +311,6 @@ def main():
                 "model": model_args,
             }
         )
-    collator_args.values_per_word = model_args.values_per_word
     collator_args.measures = model_args.measures
     validate_args(training_args, model_args, collator_args)
 
@@ -360,7 +321,7 @@ def main():
     console_print(f"[green]process_index[/green]: {accelerator.process_index}")
 
     # model
-    model = BreakProminenceClassifier(model_args)
+    model = EmotionClassifier(model_args)
     console_rule("Model")
     print_and_draw_model()
 
@@ -387,7 +348,7 @@ def main():
         batch_size=training_args.batch_size,
         shuffle=True,
         collate_fn=collator,
-        drop_last=True,
+        drop_last=training_args.drop_last,
     )
 
     val_dl = DataLoader(

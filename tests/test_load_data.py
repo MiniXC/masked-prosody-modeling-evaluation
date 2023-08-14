@@ -5,7 +5,7 @@ sys.path.append(".")  # add root of project to path
 from datasets import load_dataset
 from torch.utils.data import DataLoader
 
-from configs.args import ModelArgs, TrainingArgs, CollatorArgs
+from configs.args import BURNModelArgs, TrainingArgs, CollatorArgs
 from collators import get_collator
 
 default_args = TrainingArgs()

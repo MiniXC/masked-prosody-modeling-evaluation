@@ -10,14 +10,14 @@ from rich.console import Console
 
 console = Console()
 
-from configs.args import ModelArgs
+from configs.args import RAVDESSModelArgs
 from scripts.util.remote import push_to_hub
 
 
 class EmotionClassifier(nn.Module):
     def __init__(
         self,
-        args: ModelArgs,
+        args: RAVDESSModelArgs,
     ):
         super().__init__()
 
@@ -45,9 +45,12 @@ class EmotionClassifier(nn.Module):
                 self.mlp.add_module(f"layer_{n}_gelu", nn.GELU())
                 self.mlp.add_module(f"layer_{n}_dropout", nn.Dropout(args.dropout))
 
-            self.mlp.add_module("layer_out_linear", nn.Linear(args.hidden_dim, 2))
-
-        self.avg_max_linear = nn.Linear(args.hidden_dim, 8)
+        self.final_linear = nn.Sequential(
+            nn.Linear(args.hidden_dim * 2, args.hidden_dim),
+            nn.GELU(),
+            nn.Dropout(args.dropout),
+            nn.Linear(args.hidden_dim, 8),
+        )
 
         self.args = args
 
@@ -59,8 +62,9 @@ class EmotionClassifier(nn.Module):
                 x.mean(dim=1),
                 x.max(dim=1).values,
             ],
+            dim=-1,
         )
-        return self.avg_max_linear(x)
+        return self.final_linear(x)
 
     def save_model(self, path, accelerator=None, onnx=False):
         path = Path(path)
@@ -87,7 +91,7 @@ class EmotionClassifier(nn.Module):
             config_file = cached_file(path_or_hubid, "model_config.yml")
             model_file = cached_file(path_or_hubid, "pytorch_model.bin")
         args = yaml.load(open(config_file, "r"), Loader=yaml.Loader)
-        args = ModelArgs(**args)
+        args = RAVDESSModelArgs(**args)
         model = EmotionClassifier(args)
         model.load_state_dict(torch.load(model_file))
         return model

@@ -6,9 +6,9 @@ import torch
 import onnxruntime as ort
 
 from model.burn_classifiers import SimpleMLP
-from configs.args import ModelArgs
+from configs.args import BURNModelArgs
 
-model = SimpleMLP(ModelArgs())
+model = SimpleMLP(BURNModelArgs())
 
 OUT_SHAPE = (1, 10)
 

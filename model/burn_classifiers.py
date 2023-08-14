@@ -10,14 +10,14 @@ from rich.console import Console
 
 console = Console()
 
-from configs.args import ModelArgs
+from configs.args import BURNModelArgs
 from scripts.util.remote import push_to_hub
 
 
 class BreakProminenceClassifier(nn.Module):
     def __init__(
         self,
-        args: ModelArgs,
+        args: BURNModelArgs,
     ):
         super().__init__()
 
@@ -78,7 +78,7 @@ class BreakProminenceClassifier(nn.Module):
             config_file = cached_file(path_or_hubid, "model_config.yml")
             model_file = cached_file(path_or_hubid, "pytorch_model.bin")
         args = yaml.load(open(config_file, "r"), Loader=yaml.Loader)
-        args = ModelArgs(**args)
+        args = BURNModelArgs(**args)
         model = BreakProminenceClassifier(args)
         model.load_state_dict(torch.load(model_file))
         return model

@@ -203,19 +203,17 @@ class BaselineRAVDESSCollator:
                 audio, sr = audio["array"], audio["sampling_rate"]
                 vocex_output = self.vocex(audio, sr)
                 for measure in ALL_MEASURES:
-                    measures[measure] = vocex_output["measures"][measure]
-
-                for m, v in measures.items():
+                    v = vocex_output["measures"][measure]
                     v = v.flatten()
                     # min-max normalize
                     if (v.max() - v.min()) == 0:
                         v = np.zeros_like(v)
                     else:
                         v = (v - v.min()) / (v.max() - v.min())
-                    measures[m] = v
+                    measures[measure] = v
 
                     np.save(
-                        Path(audio_path).with_suffix(f".{m}.npy"),
+                        Path(audio_path).with_suffix(f".{measure}.npy"),
                         v,
                     )
             for measure in results:

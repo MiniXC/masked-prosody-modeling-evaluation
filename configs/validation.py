@@ -1,4 +1,4 @@
-from .args import TrainingArgs, ModelArgs, BURNCollatorArgs, RAVDESSCollatorArgs
+from .args import TrainingArgs, BURNModelArgs, BURNCollatorArgs, RAVDESSCollatorArgs
 
 
 def validate_args(*args):
@@ -14,7 +14,7 @@ def validate_args(*args):
             if arg.push_to_hub:
                 if arg.hub_repo is None:
                     raise ValueError("hub_repo must be specified")
-        if isinstance(arg, ModelArgs):
+        if isinstance(arg, BURNModelArgs):
             if arg.hidden_dim % 2 != 0:
                 raise ValueError("hidden_dim should be divisible by 2")
         if isinstance(arg, BURNCollatorArgs) or isinstance(arg, RAVDESSCollatorArgs):

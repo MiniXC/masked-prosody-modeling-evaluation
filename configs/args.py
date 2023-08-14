@@ -29,6 +29,7 @@ class TrainingArgs:
     save_every_n_steps: int = 1000
     push_to_hub: bool = False
     hub_repo: str = None
+    drop_last: bool = False
 
 
 @dataclass
@@ -50,10 +51,19 @@ class RAVDESSCollatorArgs:
 
 
 @dataclass
-class ModelArgs:
-    n_layers: int = 4
+class BURNModelArgs:
+    n_layers: int = 2
     hidden_dim: int = 512
     measures: str = "pitch,energy,voice_activity_binary"
     values_per_word: int = 10
+    type: str = "mlp"  # can be "mlp" or "transformer"
+    dropout: float = 0.1
+
+
+@dataclass
+class RAVDESSModelArgs:
+    n_layers: int = 2
+    hidden_dim: int = 512
+    measures: str = "pitch,energy,voice_activity_binary"
     type: str = "mlp"  # can be "mlp" or "transformer"
     dropout: float = 0.1
