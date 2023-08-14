@@ -13,13 +13,18 @@ class TrainingArgs:
     wandb_mode: str = "offline"
     wandb_project: str = None
     wandb_dir: str = "wandb"
-    train_split: str = "train[:90%]"
-    val_split: str = "train[90%:]"
     n_steps: int = 2000
     batch_size: int = 32
     seed: int = 0
     burn_dataset: str = "cdminix/bu_radio"
+    burn_train_split: str = "train[:90%]"
+    burn_val_split: str = "train[90%:]"
     ravdess_dataset: str = "narad/ravdess"
+    ravdess_train_split: str = "train[:90%]"
+    ravdess_val_split: str = "train[90%:]"
+    timit_dataset: str = "timit_asr"
+    timit_train_split: str = "train"
+    timit_val_split: str = "test"
     log_every_n_steps: int = 10
     do_full_eval: bool = True
     do_save: bool = False
@@ -51,6 +56,15 @@ class RAVDESSCollatorArgs:
 
 
 @dataclass
+class TIMITCollatorArgs:
+    overwrite: bool = False
+    max_frames: int = 768
+    vocex: str = "cdminix/vocex"
+    vocex_fp16: bool = False
+    name: str = "default_timit"
+
+
+@dataclass
 class BURNModelArgs:
     n_layers: int = 2
     hidden_dim: int = 512
@@ -62,6 +76,15 @@ class BURNModelArgs:
 
 @dataclass
 class RAVDESSModelArgs:
+    n_layers: int = 2
+    hidden_dim: int = 512
+    measures: str = "pitch,energy,voice_activity_binary"
+    type: str = "mlp"  # can be "mlp" or "transformer"
+    dropout: float = 0.1
+
+
+@dataclass
+class TIMITModelArgs:
     n_layers: int = 2
     hidden_dim: int = 512
     measures: str = "pitch,energy,voice_activity_binary"

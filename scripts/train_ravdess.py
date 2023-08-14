@@ -329,13 +329,15 @@ def main():
     console_rule("Dataset")
 
     console_print(f"[green]dataset[/green]: {training_args.ravdess_dataset}")
-    console_print(f"[green]train_split[/green]: {training_args.train_split}")
-    console_print(f"[green]val_split[/green]: {training_args.val_split}")
+    console_print(f"[green]train_split[/green]: {training_args.ravdess_train_split}")
+    console_print(f"[green]val_split[/green]: {training_args.ravdess_val_split}")
 
     train_ds = load_dataset(
-        training_args.ravdess_dataset, split=training_args.train_split
+        training_args.ravdess_dataset, split=training_args.ravdess_train_split
     )
-    val_ds = load_dataset(training_args.ravdess_dataset, split=training_args.val_split)
+    val_ds = load_dataset(
+        training_args.ravdess_dataset, split=training_args.ravdess_val_split
+    )
 
     console_print(f"[green]train[/green]: {len(train_ds)}")
     console_print(f"[green]val[/green]: {len(val_ds)}")

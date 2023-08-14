@@ -26,11 +26,15 @@ import matplotlib.pyplot as plt
 console = Console()
 
 # local imports
-from configs.args import TrainingArgs, BURNModelArgs, BURNCollatorArgs as CollatorArgs
+from configs.args import (
+    TrainingArgs,
+    TIMITModelArgs as ModelArgs,
+    TIMITCollatorArgs as CollatorArgs,
+)
 from configs.validation import validate_args
 from util.remote import wandb_update_config, wandb_init, push_to_hub
-from util.plotting import plot_baseline_burn_batch as plot_baseline_batch
-from model.burn_classifiers import BreakProminenceClassifier
+from util.plotting import plot_baseline_timit_batch as plot_baseline_batch
+from model.timit_classifiers import PhonemeWordBoundaryClassifier
 from collators import get_collator
 
 
@@ -111,39 +115,43 @@ def train_epoch(epoch):
     global global_step
     model.train()
     losses = deque(maxlen=training_args.log_every_n_steps)
-    break_losses = deque(maxlen=training_args.log_every_n_steps)
-    prom_losses = deque(maxlen=training_args.log_every_n_steps)
+    phon_losses = deque(maxlen=training_args.log_every_n_steps)
+    word_losses = deque(maxlen=training_args.log_every_n_steps)
     step = 0
     console_rule(f"Epoch {epoch}")
     last_loss = None
     for batch in train_dl:
         with accelerator.accumulate(model):
             x = torch.cat(
-                [batch["measures"][m] for m in model_args.measures.split(",")], dim=-1
+                [
+                    batch["measures"][m].unsqueeze(-1)
+                    for m in model_args.measures.split(",")
+                ],
+                dim=-1,
             )
             y = model(x)
-            prom_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-                y[:, :, 0], batch["prominence"].float(), reduction="none"
+            phon_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                y[:, :, 0], batch["phoneme_boundaries"].float(), reduction="none"
             )
-            break_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-                y[:, :, 1], batch["break"].float(), reduction="none"
+            word_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                y[:, :, 1], batch["word_boundaries"].float(), reduction="none"
             )
             mask_len = batch["mask"].shape[-1]
-            prom_loss *= batch["mask"]
-            break_loss *= batch["mask"]
-            prom_loss = (
-                prom_loss.sum()
+            phon_loss *= batch["mask"]
+            word_loss *= batch["mask"]
+            phon_loss = (
+                phon_loss.sum()
                 * (batch["mask"].sum() / mask_len)
-                / prom_loss.shape[-1]
-                / prom_loss.shape[0]
+                / phon_loss.shape[-1]
+                / phon_loss.shape[0]
             )
-            break_loss = (
-                break_loss.sum()
+            word_loss = (
+                word_loss.sum()
                 * (batch["mask"].sum() / mask_len)
-                / break_loss.shape[-1]
-                / break_loss.shape[0]
+                / word_loss.shape[-1]
+                / word_loss.shape[0]
             )
-            loss = (break_loss + prom_loss) / 2
+            loss = (phon_loss + word_loss) / 2
             accelerator.backward(loss)
             accelerator.clip_grad_norm_(
                 model.parameters(), training_args.gradient_clip_val
@@ -152,8 +160,8 @@ def train_epoch(epoch):
             scheduler.step()
             optimizer.zero_grad()
         losses.append(loss.detach())
-        break_losses.append(break_loss.detach())
-        prom_losses.append(prom_loss.detach())
+        phon_losses.append(phon_loss.detach())
+        word_losses.append(word_loss.detach())
         if (
             step > 0
             and step % training_args.log_every_n_steps == 0
@@ -164,8 +172,8 @@ def train_epoch(epoch):
                 "train",
                 {
                     "loss": last_loss,
-                    "break_loss": torch.mean(torch.tensor(break_losses)).item(),
-                    "prom_loss": torch.mean(torch.tensor(prom_losses)).item(),
+                    "phon_loss": torch.mean(torch.tensor(phon_losses)).item(),
+                    "word_loss": torch.mean(torch.tensor(word_losses)).item(),
                 },
                 print_log=False,
             )
@@ -198,63 +206,65 @@ def train_epoch(epoch):
 
 def evaluate():
     model.eval()
-    y_true_prom = []
-    y_pred_prom = []
-    y_true_break = []
-    y_pred_break = []
+    y_true_phon = []
+    y_pred_phon = []
+    y_true_word = []
+    y_pred_word = []
     losses = []
-    prom_losses = []
-    break_losses = []
+    phon_losses = []
+    word_losses = []
     console_rule("Evaluation")
     with torch.no_grad():
         for batch in val_dl:
             x = torch.cat(
-                [batch["measures"][m] for m in model_args.measures.split(",")], dim=-1
+                [
+                    batch["measures"][m].unsqueeze(-1)
+                    for m in model_args.measures.split(",")
+                ],
+                dim=-1,
             )
             y = model(x)
-            prom_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-                y[:, :, 0], batch["prominence"].float(), reduction="none"
+            phon_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                y[:, :, 0], batch["phoneme_boundaries"].float(), reduction="none"
             )
-            break_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-                y[:, :, 1], batch["break"].float(), reduction="none"
+            word_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                y[:, :, 1], batch["word_boundaries"].float(), reduction="none"
             )
             mask_len = batch["mask"].shape[-1]
-            prom_loss *= batch["mask"]
-            break_loss *= batch["mask"]
-            prom_loss = (
-                prom_loss.sum() / (batch["mask"].sum() / mask_len) / prom_loss.shape[-1]
+            phon_loss *= batch["mask"]
+            word_loss *= batch["mask"]
+            phon_loss = (
+                phon_loss.sum() / (batch["mask"].sum() / mask_len) / phon_loss.shape[-1]
             )
-            break_loss = (
-                break_loss.sum()
-                / (batch["mask"].sum() / mask_len)
-                / break_loss.shape[-1]
+            word_loss = (
+                word_loss.sum() / (batch["mask"].sum() / mask_len) / word_loss.shape[-1]
             )
-            loss = (break_loss + prom_loss) / 2
+            loss = (phon_loss + word_loss) / 2
             losses.append(loss.detach())
-            break_losses.append(break_loss.detach())
-            prom_losses.append(prom_loss.detach())
-            y_true_prom.append(batch["prominence"].flatten())
-            y_pred_prom.append(torch.sigmoid(y[:, :, 0]).flatten())
-            y_true_break.append(batch["break"].flatten())
-            y_pred_break.append(torch.sigmoid(y[:, :, 1]).flatten())
-    y_true_prom = torch.cat(y_true_prom).cpu().numpy()
-    y_pred_prom = torch.round(torch.cat(y_pred_prom)).cpu().numpy()
-    y_true_break = torch.cat(y_true_break).cpu().numpy()
-    y_pred_break = torch.round(torch.cat(y_pred_break)).cpu().numpy()
+            phon_losses.append(phon_loss.detach())
+            word_losses.append(word_loss.detach())
+            y_true_phon.append(batch["phoneme_boundaries"].flatten())
+            y_pred_phon.append(torch.sigmoid(y[:, :, 0]).flatten())
+            y_true_word.append(batch["word_boundaries"].flatten())
+            y_pred_word.append(torch.sigmoid(y[:, :, 1]).flatten())
+    y_true_phon = torch.cat(y_true_phon).cpu().numpy()
+    y_pred_phon = torch.round(torch.cat(y_pred_phon)).cpu().numpy()
+    y_true_word = torch.cat(y_true_word).cpu().numpy()
+    y_pred_word = torch.round(torch.cat(y_pred_word)).cpu().numpy()
     wandb_log(
         "val",
         {
             "loss": torch.mean(torch.tensor(losses)).item(),
-            "break_loss": torch.mean(torch.tensor(break_losses)).item(),
-            "prom_loss": torch.mean(torch.tensor(prom_losses)).item(),
-            "prom_acc": accuracy_score(y_true_prom, y_pred_prom),
-            "prom_f1": f1_score(y_true_prom, y_pred_prom),
-            "prom_precision": precision_score(y_true_prom, y_pred_prom),
-            "prom_recall": recall_score(y_true_prom, y_pred_prom),
-            "break_acc": accuracy_score(y_true_break, y_pred_break),
-            "break_f1": f1_score(y_true_break, y_pred_break),
-            "break_precision": precision_score(y_true_break, y_pred_break),
-            "break_recall": recall_score(y_true_break, y_pred_break),
+            "phon_loss": torch.mean(torch.tensor(phon_losses)).item(),
+            "word_loss": torch.mean(torch.tensor(word_losses)).item(),
+            "phon_f1": f1_score(y_true_phon, y_pred_phon),
+            "phon_precision": precision_score(y_true_phon, y_pred_phon),
+            "phon_recall": recall_score(y_true_phon, y_pred_phon),
+            "phon_accuracy": accuracy_score(y_true_phon, y_pred_phon),
+            "word_f1": f1_score(y_true_word, y_pred_word),
+            "word_precision": precision_score(y_true_word, y_pred_word),
+            "word_recall": recall_score(y_true_word, y_pred_word),
+            "word_accuracy": accuracy_score(y_true_word, y_pred_word),
         },
     )
 
@@ -262,42 +272,44 @@ def evaluate():
 def evaluate_loss_only():
     model.eval()
     losses = []
-    prom_losses = []
-    break_losses = []
+    phon_losses = []
+    word_losses = []
     console_rule("Evaluation")
     with torch.no_grad():
         for batch in val_dl:
             x = torch.cat(
-                [batch["measures"][m] for m in model_args.measures.split(",")], dim=-1
+                [
+                    batch["measures"][m].unsqueeze(-1)
+                    for m in model_args.measures.split(",")
+                ],
+                dim=-1,
             )
             y = model(x)
-            prom_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-                y[:, :, 0], batch["prominence"].float(), reduction="none"
+            phon_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                y[:, :, 0], batch["phoneme_boundaries"].float(), reduction="none"
             )
-            break_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-                y[:, :, 1], batch["break"].float(), reduction="none"
+            word_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                y[:, :, 1], batch["word_boundaries"].float(), reduction="none"
             )
             mask_len = batch["mask"].shape[-1]
-            prom_loss *= batch["mask"]
-            break_loss *= batch["mask"]
-            prom_loss = (
-                prom_loss.sum() / (batch["mask"].sum() / mask_len) / prom_loss.shape[-1]
+            phon_loss *= batch["mask"]
+            word_loss *= batch["mask"]
+            phon_loss = (
+                phon_loss.sum() / (batch["mask"].sum() / mask_len) / phon_loss.shape[-1]
             )
-            break_loss = (
-                break_loss.sum()
-                / (batch["mask"].sum() / mask_len)
-                / break_loss.shape[-1]
+            word_loss = (
+                word_loss.sum() / (batch["mask"].sum() / mask_len) / word_loss.shape[-1]
             )
-            loss = (break_loss + prom_loss) / 2
+            loss = (phon_loss + word_loss) / 2
             losses.append(loss.detach())
-            break_losses.append(break_loss.detach())
-            prom_losses.append(prom_loss.detach())
+            phon_losses.append(phon_loss.detach())
+            word_losses.append(word_loss.detach())
     wandb_log(
         "val",
         {
             "loss": torch.mean(torch.tensor(losses)).item(),
-            "break_loss": torch.mean(torch.tensor(break_losses)).item(),
-            "prom_loss": torch.mean(torch.tensor(prom_losses)).item(),
+            "break_loss": torch.mean(torch.tensor(phon_losses)).item(),
+            "prom_loss": torch.mean(torch.tensor(word_losses)).item(),
         },
     )
 
@@ -307,7 +319,7 @@ def main():
 
     global_step = 0
 
-    parser = HfArgumentParser([TrainingArgs, BURNModelArgs, CollatorArgs])
+    parser = HfArgumentParser([TrainingArgs, ModelArgs, CollatorArgs])
 
     accelerator = Accelerator()
 
@@ -372,7 +384,6 @@ def main():
                 "model": model_args,
             }
         )
-    collator_args.values_per_word = model_args.values_per_word
     collator_args.measures = model_args.measures
     validate_args(training_args, model_args, collator_args)
 
@@ -383,22 +394,26 @@ def main():
     console_print(f"[green]process_index[/green]: {accelerator.process_index}")
 
     # model
-    model = BreakProminenceClassifier(model_args)
+    model = PhonemeWordBoundaryClassifier(model_args)
     console_rule("Model")
     print_and_draw_model()
 
     # dataset
     console_rule("Dataset")
 
-    console_print(f"[green]dataset[/green]: {training_args.burn_dataset}")
-    console_print(f"[green]train_split[/green]: {training_args.burn_train_split}")
-    console_print(f"[green]val_split[/green]: {training_args.burn_val_split}")
+    console_print(f"[green]dataset[/green]: {training_args.timit_dataset}")
+    console_print(f"[green]train_split[/green]: {training_args.timit_train_split}")
+    console_print(f"[green]val_split[/green]: {training_args.timit_val_split}")
 
     train_ds = load_dataset(
-        training_args.burn_dataset, split=training_args.burn_train_split
+        training_args.timit_dataset,
+        split=training_args.timit_train_split,
+        data_dir=os.environ["TIMIT_PATH"],
     )
     val_ds = load_dataset(
-        training_args.burn_dataset, split=training_args.burn_val_split
+        training_args.timit_dataset,
+        split=training_args.timit_val_split,
+        data_dir=os.environ["TIMIT_PATH"],
     )
 
     console_print(f"[green]train[/green]: {len(train_ds)}")
@@ -430,7 +445,7 @@ def main():
         for dl in [train_dl, val_dl]:
             for batch in tqdm(dl, total=len(dl)):
                 if is_first_batch:
-                    if collator_args.name == "default_burn":
+                    if collator_args.name == "default_timit":
                         fig = plot_baseline_batch(batch, collator_args)
                         plt.savefig("figures/first_batch.png")
                     wandb.log({"first_batch": wandb.Image(fig)})

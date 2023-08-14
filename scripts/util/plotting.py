@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import librosa
 import numpy as np
 
-from configs.args import BURNCollatorArgs, RAVDESSCollatorArgs
+from configs.args import BURNCollatorArgs, RAVDESSCollatorArgs, TIMITCollatorArgs
 
 
 def plot_baseline_burn_batch(batch, args: BURNCollatorArgs):
@@ -50,30 +50,7 @@ def plot_baseline_burn_batch(batch, args: BURNCollatorArgs):
     return fig
 
 
-# RAVDESS
-# sns.lineplot(
-#     x=range(len(batch["measures"]["pitch"][0])), y=batch["measures"]["pitch"][0] * 120
-# )
-# sns.lineplot(
-#     x=range(len(batch["measures"]["energy"][0])), y=batch["measures"]["energy"][0] * 120
-# )
-# sns.lineplot(
-#     x=range(len(batch["measures"]["voice_activity_binary"][0])),
-#     y=batch["measures"]["voice_activity_binary"][0] * 120,
-# )
-# # audio
-# audio = batch["audio"][0]["array"]
-# sr = batch["audio"][0]["sampling_rate"]
-# mels = np.log(librosa.feature.melspectrogram(y=audio, sr=sr) + 1e-6)
-# plt.imshow(mels, aspect="auto", origin="lower", interpolation="none")
-
-
 def plot_baseline_ravdess_batch(batch, args: RAVDESSCollatorArgs):
-    """
-    the batch cotains a dict of measures, each with shape (batch_size, max_len, args.values_per_word)
-    we plot each measure as an image, as well as the original audio
-    """
-
     batch_size = len(batch["audio"])
     measures = args.measures.split(",")
     fig, axs = plt.subplots(
@@ -107,6 +84,59 @@ def plot_baseline_ravdess_batch(batch, args: RAVDESSCollatorArgs):
         axs[-1, i].set_title("audio")
         axs[-1, i].set_xticks([])
         axs[-1, i].set_yticks([])
+    plt.tight_layout()
+
+    return fig
+
+
+def plot_baseline_timit_batch(batch, args: TIMITCollatorArgs):
+    batch_size = len(batch["audio"])
+
+    fig, axs = plt.subplots(batch_size, 1, figsize=(batch_size * 5, 3))
+    audios = [a["array"] for a in batch["audio"]]
+    srs = [a["sampling_rate"] for a in batch["audio"]]
+    # resample to 22050
+    audios = [
+        librosa.resample(y=a, orig_sr=sr, target_sr=22050) for a, sr in zip(audios, srs)
+    ]
+    srs = [22050 for _ in srs]
+    mels = [
+        np.log(
+            librosa.feature.melspectrogram(
+                y=a, sr=sr, n_fft=1024, hop_length=256, win_length=256
+            )
+            + 1e-6
+        )
+        for a, sr in zip(audios, srs)
+    ]
+    max_len = args.max_frames
+    # pad mels to max length
+    mels = [
+        np.pad(m, ((0, 0), (0, max_len - m.shape[1])), mode="constant")
+        if m.shape[1] < max_len
+        else m
+        for m in mels
+    ]
+    # plot, while making sure the sizes are the same for each measure
+    # disable ticks
+    for i in range(batch_size):
+        axs[i].imshow(mels[i], aspect="auto", origin="lower", interpolation="none")
+        axs[i].set_title("audio")
+        axs[i].set_xticks([])
+        axs[i].set_yticks([])
+        sns.lineplot(
+            x=range(len(batch["phoneme_boundaries"][i])),
+            y=batch["phoneme_boundaries"][i] * 120,
+            ax=axs[i],
+        )
+        axs[i].set_title("phoneme boundaries")
+        axs[i].set_xticks([])
+        axs[i].set_yticks([])
+        sns.lineplot(
+            x=range(len(batch["word_boundaries"][i])),
+            y=batch["word_boundaries"][i] * 120,
+            ax=axs[i],
+        )
     plt.tight_layout()
 
     return fig

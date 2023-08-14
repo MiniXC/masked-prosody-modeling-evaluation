@@ -7,7 +7,7 @@ import numpy as np
 import librosa
 from vocex import Vocex
 
-from configs.args import BURNCollatorArgs, RAVDESSCollatorArgs
+from configs.args import BURNCollatorArgs, RAVDESSCollatorArgs, TIMITCollatorArgs
 
 ALL_MEASURES = [
     "pitch",
@@ -250,5 +250,124 @@ class BaselineRAVDESSCollator:
         batch["emotion_onehot"] = F.one_hot(
             batch["emotion"], num_classes=len(self.emotions2int)
         ).to(torch.float32)
+
+        return batch
+
+
+class BaselineTIMITCollator:
+    def __init__(
+        self,
+        args: TIMITCollatorArgs,
+    ):
+        """
+        Collator for the baseline model, which extracts
+        any subset of the following measures from the dataset:
+        - pitch
+        - energy
+        - duration
+        - voice activity
+        """
+        super().__init__()
+
+        self.args = args
+        self.vocex = Vocex.from_pretrained(self.args.vocex, fp16=self.args.vocex_fp16)
+
+    def __call__(self, batch):
+        batch = {k: [d[k] for d in batch] for k in batch[0]}
+        results = {measure: [] for measure in self.args.measures.split(",")}
+        phoneme_boundaries = []
+        word_boundaries = []
+        for k, audio in enumerate(batch["audio"]):
+            audio_path = audio["path"]
+            measures = {measure: [] for measure in ALL_MEASURES}
+            original_len = len(audio["array"])
+            for measure in ALL_MEASURES:
+                file = Path(audio_path).with_suffix(f".{measure}.npy")
+                if file.exists() and not self.args.overwrite:
+                    measures[measure] = np.load(file)
+                    vocex_len = len(measures[measure])
+            if (not file.exists()) or self.args.overwrite:
+                audio, sr = audio["array"], audio["sampling_rate"]
+                vocex_output = self.vocex(audio, sr)
+                for measure in ALL_MEASURES:
+                    v = vocex_output["measures"][measure]
+                    v = v.flatten()
+                    vocex_len = len(v)
+                    # min-max normalize
+                    if (v.max() - v.min()) == 0:
+                        v = np.zeros_like(v)
+                    else:
+                        v = (v - v.min()) / (v.max() - v.min())
+                    measures[measure] = v
+
+                    np.save(
+                        Path(audio_path).with_suffix(f".{measure}.npy"),
+                        v,
+                    )
+            for measure in results:
+                results[measure].append(measures[measure])
+
+            # align phoneme boundaries with vocex output
+            phoneme_stops = batch["phonetic_detail"][k]["stop"][:-1]
+            phoneme_stops = np.round(np.array(phoneme_stops) / original_len * vocex_len)
+            phoneme_boundaries.append(phoneme_stops)
+            # convert to sequence of 0s and 1s
+            phoneme_boundaries[-1] = np.array(
+                [
+                    1 if i in phoneme_boundaries[-1] else 0
+                    for i in range(len(measures["pitch"]))
+                ]
+            )
+
+            # align word boundaries with vocex output
+            word_stops = batch["word_detail"][k]["stop"]
+            word_stops = [batch["word_detail"][k]["start"][0]] + word_stops
+            word_stops = np.round(np.array(word_stops) / original_len * vocex_len)
+            word_boundaries.append(word_stops)
+            # convert to sequence of 0s and 1s
+            word_boundaries[-1] = np.array(
+                [
+                    1 if i in word_boundaries[-1] else 0
+                    for i in range(len(measures["pitch"]))
+                ]
+            )
+
+        # pad to max length
+        first_measure = list(results.keys())[0]
+        if self.args.max_frames is None:
+            max_len = np.max([r.shape[0] for r in results[first_measure]])
+        else:
+            max_len = self.args.max_frames
+
+        mask = np.zeros((len(results[first_measure]), max_len))
+
+        for i, r in enumerate(results[first_measure]):
+            mask[i, : r.shape[0]] = 1
+
+        batch["mask"] = torch.tensor(mask).bool()
+
+        batch["measures"] = {measure: results[measure] for measure in results}
+
+        # pad measures
+        for measure in results:
+            batch["measures"][measure] = torch.tensor(
+                np.array(
+                    [
+                        np.pad(r, (0, max_len - r.shape[0]))
+                        for r in batch["measures"][measure]
+                    ]
+                )
+            ).to(torch.float32)
+
+        # pad boundaries
+        phoneme_boundaries = [
+            np.pad(b, (0, max_len - b.shape[0])) for b in phoneme_boundaries
+        ]
+        word_boundaries = [
+            np.pad(b, (0, max_len - b.shape[0])) for b in word_boundaries
+        ]
+
+        batch["phoneme_boundaries"] = torch.tensor(phoneme_boundaries).float()
+        batch["word_boundaries"] = torch.tensor(word_boundaries).float()
 
         return batch

@@ -128,58 +128,19 @@ strict digraph model {
                     <TABLE BORDER="0" CELLBORDER="1"
                     CELLSPACING="0" CELLPADDING="4">
                     <TR>
-                        <TD ROWSPAN="2">mean<BR/>depth:1</TD>
+                        <TD ROWSPAN="2">Linear<BR/>depth:2</TD>
                         <TD COLSPAN="2">input:</TD>
                         <TD COLSPAN="2">(32, 256, 512) </TD>
                     </TR>
                     <TR>
                         <TD COLSPAN="2">output: </TD>
-                        <TD COLSPAN="2">(32, 512) </TD>
+                        <TD COLSPAN="2">(32, 256, 2) </TD>
                     </TR>
-                    </TABLE>> fillcolor=aliceblue]
+                    </TABLE>> fillcolor=darkseagreen1]
 	11 [label=<
                     <TABLE BORDER="0" CELLBORDER="1"
                     CELLSPACING="0" CELLPADDING="4">
-                    <TR>
-                        <TD ROWSPAN="2">max<BR/>depth:1</TD>
-                        <TD COLSPAN="2">input:</TD>
-                        <TD COLSPAN="2">(32, 256, 512) </TD>
-                    </TR>
-                    <TR>
-                        <TD COLSPAN="2">output: </TD>
-                        <TD COLSPAN="2">2 x (32, 512) </TD>
-                    </TR>
-                    </TABLE>> fillcolor=aliceblue]
-	12 [label=<
-                    <TABLE BORDER="0" CELLBORDER="1"
-                    CELLSPACING="0" CELLPADDING="4">
-                    <TR>
-                        <TD ROWSPAN="2">cat<BR/>depth:1</TD>
-                        <TD COLSPAN="2">input:</TD>
-                        <TD COLSPAN="2">2 x (32, 512) </TD>
-                    </TR>
-                    <TR>
-                        <TD COLSPAN="2">output: </TD>
-                        <TD COLSPAN="2">(32, 1024) </TD>
-                    </TR>
-                    </TABLE>> fillcolor=aliceblue]
-	13 [label=<
-                    <TABLE BORDER="0" CELLBORDER="1"
-                    CELLSPACING="0" CELLPADDING="4">
-                    <TR>
-                        <TD ROWSPAN="2">Linear<BR/>depth:1</TD>
-                        <TD COLSPAN="2">input:</TD>
-                        <TD COLSPAN="2">(32, 1024) </TD>
-                    </TR>
-                    <TR>
-                        <TD COLSPAN="2">output: </TD>
-                        <TD COLSPAN="2">(32, 8) </TD>
-                    </TR>
-                    </TABLE>> fillcolor=darkseagreen1]
-	14 [label=<
-                    <TABLE BORDER="0" CELLBORDER="1"
-                    CELLSPACING="0" CELLPADDING="4">
-                        <TR><TD>output-tensor<BR/>depth:0</TD><TD>(32, 8)</TD></TR>
+                        <TR><TD>output-tensor<BR/>depth:0</TD><TD>(32, 256, 2)</TD></TR>
                     </TABLE>> fillcolor=lightyellow]
 	0 -> 1
 	1 -> 2
@@ -191,9 +152,5 @@ strict digraph model {
 	7 -> 8
 	8 -> 9
 	9 -> 10
-	9 -> 11
-	10 -> 12
-	11 -> 12
-	12 -> 13
-	13 -> 14
+	10 -> 11
 }
