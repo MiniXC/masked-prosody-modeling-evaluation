@@ -5,7 +5,7 @@ sys.path.append(".")  # add root of project to path
 import torch
 import onnxruntime as ort
 
-from model.classifiers import SimpleMLP
+from model.burn_classifiers import SimpleMLP
 from configs.args import ModelArgs
 
 model = SimpleMLP(ModelArgs())

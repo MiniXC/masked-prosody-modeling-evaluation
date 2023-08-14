@@ -26,11 +26,11 @@ import matplotlib.pyplot as plt
 console = Console()
 
 # local imports
-from configs.args import TrainingArgs, ModelArgs, CollatorArgs
+from configs.args import TrainingArgs, ModelArgs, BURNCollatorArgs as CollatorArgs
 from configs.validation import validate_args
 from util.remote import wandb_update_config, wandb_init, push_to_hub
-from util.plotting import plot_baseline_batch
-from model.classifiers import BreakProminenceClassifier
+from util.plotting import plot_baseline_burn_batch as plot_baseline_batch
+from model.burn_classifiers import BreakProminenceClassifier
 from collators import get_collator
 
 
@@ -390,12 +390,12 @@ def main():
     # dataset
     console_rule("Dataset")
 
-    console_print(f"[green]dataset[/green]: {training_args.dataset}")
+    console_print(f"[green]dataset[/green]: {training_args.burn_dataset}")
     console_print(f"[green]train_split[/green]: {training_args.train_split}")
     console_print(f"[green]val_split[/green]: {training_args.val_split}")
 
-    train_ds = load_dataset(training_args.dataset, split=training_args.train_split)
-    val_ds = load_dataset(training_args.dataset, split=training_args.val_split)
+    train_ds = load_dataset(training_args.burn_dataset, split=training_args.train_split)
+    val_ds = load_dataset(training_args.burn_dataset, split=training_args.val_split)
 
     console_print(f"[green]train[/green]: {len(train_ds)}")
     console_print(f"[green]val[/green]: {len(val_ds)}")
@@ -426,7 +426,7 @@ def main():
         for dl in [train_dl, val_dl]:
             for batch in tqdm(dl, total=len(dl)):
                 if is_first_batch:
-                    if collator_args.name == "default":
+                    if collator_args.name == "default_burn":
                         fig = plot_baseline_batch(batch, collator_args)
                         plt.savefig("figures/first_batch.png")
                     wandb.log({"first_batch": wandb.Image(fig)})

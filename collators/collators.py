@@ -1,13 +1,13 @@
 from pathlib import Path
 
 import torch
-from torch import nn
+import torch.nn.functional as F
 import torchaudio
 import numpy as np
 import librosa
 from vocex import Vocex
 
-from configs.args import CollatorArgs
+from configs.args import BURNCollatorArgs, RAVDESSCollatorArgs
 
 ALL_MEASURES = [
     "pitch",
@@ -24,7 +24,7 @@ def interpolate(x, target_length):
 class BaselineBURNCollator:
     def __init__(
         self,
-        args: CollatorArgs,
+        args: BURNCollatorArgs,
     ):
         """
         Collator for the baseline model, which extracts
@@ -45,6 +45,7 @@ class BaselineBURNCollator:
         batch = {k: [d[k] for d in batch] for k in batch[0]}
         for k, audio in enumerate(batch["audio"]):
             measures = {measure: [] for measure in ALL_MEASURES}
+            audio_path = audio
             for measure in ALL_MEASURES:
                 file = Path(audio).with_suffix(f".{measure}.npy")
                 if file.exists() and not self.args.overwrite:
@@ -102,7 +103,10 @@ class BaselineBURNCollator:
                                 for i in range(len(durations) - 1)
                             ]
                         )
-                    np.save(file.with_suffix(f".{measure}.npy"), measures[measure])
+                    np.save(
+                        Path(audio_path).with_suffix(f".{measure}.npy"),
+                        measures[measure],
+                    )
             for measure in results:
                 results[measure].append(measures[measure])
 
@@ -152,5 +156,101 @@ class BaselineBURNCollator:
                 ]
             )
         )
+
+        return batch
+
+
+class BaselineRAVDESSCollator:
+    def __init__(
+        self,
+        args: RAVDESSCollatorArgs,
+    ):
+        """
+        Collator for the baseline model, which extracts
+        any subset of the following measures from the dataset:
+        - pitch
+        - energy
+        - duration
+        - voice activity
+        """
+        super().__init__()
+
+        self.args = args
+        self.vocex = Vocex.from_pretrained(self.args.vocex, fp16=self.args.vocex_fp16)
+        self.emotions2int = {
+            "neutral": 0,
+            "calm": 1,
+            "happy": 2,
+            "sad": 3,
+            "angry": 4,
+            "fearful": 5,
+            "disgust": 6,
+            "surprised": 7,
+        }
+
+    def __call__(self, batch):
+        results = {measure: [] for measure in self.args.measures.split(",")}
+        # change batch from list of dicts to dict of lists
+        batch = {k: [d[k] for d in batch] for k in batch[0]}
+        for k, audio in enumerate(batch["audio"]):
+            audio_path = audio["path"]
+            measures = {measure: [] for measure in ALL_MEASURES}
+            for measure in ALL_MEASURES:
+                file = Path(audio_path).with_suffix(f".{measure}.npy")
+                if file.exists() and not self.args.overwrite:
+                    measures[measure] = np.load(file)
+            if (not file.exists()) or self.args.overwrite:
+                audio, sr = audio["array"], audio["sampling_rate"]
+                vocex_output = self.vocex(audio, sr)
+                for measure in ALL_MEASURES:
+                    measures[measure] = vocex_output["measures"][measure]
+
+                for m, v in measures.items():
+                    v = v.flatten()
+                    # min-max normalize
+                    if (v.max() - v.min()) == 0:
+                        v = np.zeros_like(v)
+                    else:
+                        v = (v - v.min()) / (v.max() - v.min())
+                    measures[m] = v
+
+                    np.save(
+                        Path(audio_path).with_suffix(f".{m}.npy"),
+                        v,
+                    )
+            for measure in results:
+                results[measure].append(measures[measure])
+
+        # pad to max length
+        first_measure = list(results.keys())[0]
+        if self.args.max_frames is None:
+            max_len = np.max([r.shape[0] for r in results[first_measure]])
+        else:
+            max_len = self.args.max_frames
+
+        mask = np.zeros((len(results[first_measure]), max_len))
+
+        for i, r in enumerate(results[first_measure]):
+            mask[i, : r.shape[0]] = 1
+
+        batch["mask"] = torch.tensor(mask).bool()
+
+        batch["measures"] = {measure: results[measure] for measure in results}
+
+        # pad measures
+        for measure in results:
+            batch["measures"][measure] = torch.tensor(
+                np.array(
+                    [
+                        np.pad(r, (0, max_len - r.shape[0]))
+                        for r in batch["measures"][measure]
+                    ]
+                )
+            ).to(torch.float32)
+
+        batch["emotion"] = torch.tensor(batch["labels"]).long()
+        batch["emotion_onehot"] = F.one_hot(
+            batch["emotion"], num_classes=len(self.emotions2int)
+        ).to(torch.float32)
 
         return batch

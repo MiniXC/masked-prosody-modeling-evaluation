@@ -1,13 +1,12 @@
 import yaml
 
-from .collators import BaselineBURNCollator
-from configs.args import CollatorArgs
+from .collators import BaselineBURNCollator, BaselineRAVDESSCollator
+from configs.args import BURNCollatorArgs, RAVDESSCollatorArgs
 import torch
 
 
-def get_collator(args: CollatorArgs):
+def get_collator(args: BURNCollatorArgs or RAVDESSCollatorArgs):
     return {
-        "default": BaselineBURNCollator,
-    }[
-        args.name
-    ](args)
+        "default_burn": BaselineBURNCollator,
+        "default_ravdess": BaselineRAVDESSCollator,
+    }[args.name](args)
