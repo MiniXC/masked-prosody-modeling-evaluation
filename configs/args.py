@@ -8,7 +8,7 @@ class TrainingArgs:
     lr_warmup_steps: int = 1000
     gradient_clip_val: float = 1.0
     timit_phon_focal_loss_alpha: float = 0.65
-    timit_word_focal_loss_alpha: float = 0.85
+    timit_word_focal_loss_alpha: float = 0.87
     checkpoint_path: str = "checkpoints"
     output_path: str = "outputs"
     run_name: str = None
