@@ -59,7 +59,11 @@ def print_and_draw_model():
     console_print(model_summary)
     if accelerator.is_main_process:
         model_graph = draw_graph(
-            model, input_data=dummy_input, save_graph=True, directory="figures/"
+            model,
+            input_data=dummy_input,
+            save_graph=True,
+            directory="figures/",
+            filename="model_timit",
         )
 
 
@@ -462,7 +466,7 @@ def main():
                 if is_first_batch:
                     if collator_args.name == "default_timit":
                         fig = plot_baseline_batch(batch, collator_args)
-                        plt.savefig("figures/first_batch.png")
+                        plt.savefig("figures/first_batch_timit.png")
                     wandb.log({"first_batch": wandb.Image(fig)})
                     is_first_batch = False
     collator.args.overwrite = False
