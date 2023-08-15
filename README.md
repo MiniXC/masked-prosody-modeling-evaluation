@@ -10,10 +10,24 @@ It's quite opinionated in the following (and probably more) ways:
 - uses separate configs for training (everything not shipped with the model), model and collator
 
 ## architecture
-The following updates automatically every time ``scripts/train.py`` is run.
+The following updates automatically every time one of the training scripts is run.
+
+## BURN (Boston University Radio News)
 <details>
 <summary>Click to expand</summary>
-<img src="./figures/model.gv.png"></img>
+<img src="./figures/model_burn.gv.png"></img>
+</details>
+
+## RAVDESS (Ryerson Audio-Visual Database of Emotional Speech and Song)
+<details>
+<summary>Click to expand</summary>
+<img src="./figures/model_ravdess.gv.png"></img>
+</details>
+
+## TIMIT (Acoustic-Phonetic Continuous Speech Corpus)
+<details>
+<summary>Click to expand</summary>
+<img src="./figures/model_timit.gv.png"></img>
 </details>
 
 ## first training batch

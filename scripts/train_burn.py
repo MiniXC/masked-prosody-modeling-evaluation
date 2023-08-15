@@ -233,10 +233,14 @@ def evaluate():
             losses.append(loss.detach())
             break_losses.append(break_loss.detach())
             prom_losses.append(prom_loss.detach())
-            y_true_prom.append(batch["prominence"].flatten())
-            y_pred_prom.append(torch.sigmoid(y[:, :, 0]).flatten())
-            y_true_break.append(batch["break"].flatten())
-            y_pred_break.append(torch.sigmoid(y[:, :, 1]).flatten())
+            y_true_prom.append(batch["prominence"][batch["mask"].bool()].flatten())
+            y_pred_prom.append(
+                torch.sigmoid(y[:, :, 0])[batch["mask"].bool()].flatten()
+            )
+            y_true_break.append(batch["break"][batch["mask"].bool()].flatten())
+            y_pred_break.append(
+                torch.sigmoid(y[:, :, 1])[batch["mask"].bool()].flatten()
+            )
     y_true_prom = torch.cat(y_true_prom).cpu().numpy()
     y_pred_prom = torch.round(torch.cat(y_pred_prom)).cpu().numpy()
     y_true_break = torch.cat(y_true_break).cpu().numpy()
