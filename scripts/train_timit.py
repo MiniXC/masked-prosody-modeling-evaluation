@@ -6,6 +6,7 @@ from pathlib import Path
 sys.path.append(".")  # add root of project to path
 
 # torch & hf
+import torchvision
 import torch
 from torch.utils.data import DataLoader
 from accelerate import Accelerator
@@ -123,35 +124,35 @@ def train_epoch(epoch):
     for batch in train_dl:
         with accelerator.accumulate(model):
             x = torch.cat(
-                [
-                    batch["measures"][m].unsqueeze(-1)
-                    for m in model_args.measures.split(",")
-                ],
+                [batch["measures"][m] for m in model_args.measures.split(",")],
                 dim=-1,
             )
             y = model(x)
-            phon_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-                y[:, :, 0], batch["phoneme_boundaries"].float(), reduction="none"
+            phon_loss = torchvision.ops.focal_loss.sigmoid_focal_loss(
+                y[:, :, 0],
+                batch["phoneme_boundaries"].float(),
+                reduction="none",
+                alpha=training_args.timit_phon_focal_loss_alpha,
             )
-            word_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-                y[:, :, 1], batch["word_boundaries"].float(), reduction="none"
+            word_loss = (
+                torchvision.ops.focal_loss.sigmoid_focal_loss(
+                    y[:, :, 1],
+                    batch["word_boundaries"].float(),
+                    reduction="none",
+                    alpha=training_args.timit_word_focal_loss_alpha,
+                )
+                * 2
             )
             mask_len = batch["mask"].shape[-1]
             phon_loss *= batch["mask"]
             word_loss *= batch["mask"]
             phon_loss = (
-                phon_loss.sum()
-                * (batch["mask"].sum() / mask_len)
-                / phon_loss.shape[-1]
-                / phon_loss.shape[0]
+                phon_loss.sum() * (batch["mask"].sum() / mask_len) / phon_loss.shape[-1]
             )
             word_loss = (
-                word_loss.sum()
-                * (batch["mask"].sum() / mask_len)
-                / word_loss.shape[-1]
-                / word_loss.shape[0]
+                word_loss.sum() * (batch["mask"].sum() / mask_len) / word_loss.shape[-1]
             )
-            loss = (phon_loss + word_loss) / 2
+            loss = (phon_loss + word_loss) / 3
             accelerator.backward(loss)
             accelerator.clip_grad_norm_(
                 model.parameters(), training_args.gradient_clip_val
@@ -217,29 +218,35 @@ def evaluate():
     with torch.no_grad():
         for batch in val_dl:
             x = torch.cat(
-                [
-                    batch["measures"][m].unsqueeze(-1)
-                    for m in model_args.measures.split(",")
-                ],
+                [batch["measures"][m] for m in model_args.measures.split(",")],
                 dim=-1,
             )
             y = model(x)
-            phon_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-                y[:, :, 0], batch["phoneme_boundaries"].float(), reduction="none"
+            phon_loss = torchvision.ops.focal_loss.sigmoid_focal_loss(
+                y[:, :, 0],
+                batch["phoneme_boundaries"].float(),
+                reduction="none",
+                alpha=training_args.timit_phon_focal_loss_alpha,
             )
-            word_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-                y[:, :, 1], batch["word_boundaries"].float(), reduction="none"
+            word_loss = (
+                torchvision.ops.focal_loss.sigmoid_focal_loss(
+                    y[:, :, 1],
+                    batch["word_boundaries"].float(),
+                    reduction="none",
+                    alpha=training_args.timit_word_focal_loss_alpha,
+                )
+                * 2
             )
             mask_len = batch["mask"].shape[-1]
             phon_loss *= batch["mask"]
             word_loss *= batch["mask"]
             phon_loss = (
-                phon_loss.sum() / (batch["mask"].sum() / mask_len) / phon_loss.shape[-1]
+                phon_loss.sum() * (batch["mask"].sum() / mask_len) / phon_loss.shape[-1]
             )
             word_loss = (
-                word_loss.sum() / (batch["mask"].sum() / mask_len) / word_loss.shape[-1]
+                word_loss.sum() * (batch["mask"].sum() / mask_len) / word_loss.shape[-1]
             )
-            loss = (phon_loss + word_loss) / 2
+            loss = (phon_loss + word_loss) / 3
             losses.append(loss.detach())
             phon_losses.append(phon_loss.detach())
             word_losses.append(word_loss.detach())
@@ -278,29 +285,35 @@ def evaluate_loss_only():
     with torch.no_grad():
         for batch in val_dl:
             x = torch.cat(
-                [
-                    batch["measures"][m].unsqueeze(-1)
-                    for m in model_args.measures.split(",")
-                ],
+                [batch["measures"][m] for m in model_args.measures.split(",")],
                 dim=-1,
             )
             y = model(x)
-            phon_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-                y[:, :, 0], batch["phoneme_boundaries"].float(), reduction="none"
+            phon_loss = torchvision.ops.focal_loss.sigmoid_focal_loss(
+                y[:, :, 0],
+                batch["phoneme_boundaries"].float(),
+                reduction="none",
+                alpha=training_args.timit_phon_focal_loss_alpha,
             )
-            word_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-                y[:, :, 1], batch["word_boundaries"].float(), reduction="none"
+            word_loss = (
+                torchvision.ops.focal_loss.sigmoid_focal_loss(
+                    y[:, :, 1],
+                    batch["word_boundaries"].float(),
+                    reduction="none",
+                    alpha=training_args.timit_word_focal_loss_alpha,
+                )
+                * 2
             )
             mask_len = batch["mask"].shape[-1]
             phon_loss *= batch["mask"]
             word_loss *= batch["mask"]
             phon_loss = (
-                phon_loss.sum() / (batch["mask"].sum() / mask_len) / phon_loss.shape[-1]
+                phon_loss.sum() * (batch["mask"].sum() / mask_len) / phon_loss.shape[-1]
             )
             word_loss = (
-                word_loss.sum() / (batch["mask"].sum() / mask_len) / word_loss.shape[-1]
+                word_loss.sum() * (batch["mask"].sum() / mask_len) / word_loss.shape[-1]
             )
-            loss = (phon_loss + word_loss) / 2
+            loss = (phon_loss + word_loss) / 3
             losses.append(loss.detach())
             phon_losses.append(phon_loss.detach())
             word_losses.append(word_loss.detach())

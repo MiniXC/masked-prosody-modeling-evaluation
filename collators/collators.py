@@ -307,16 +307,36 @@ class BaselineTIMITCollator:
             for measure in results:
                 results[measure].append(measures[measure])
 
+            # fold up measures such the the length is half the original length, but we have an additional dimension
+            for measure in results:
+                results[measure][-1] = np.array(
+                    [
+                        np.array(
+                            [
+                                results[measure][-1][i],
+                                results[measure][-1][i + 1],
+                            ]
+                        )
+                        if i + 1 < len(results[measure][-1])
+                        else np.array(
+                            [
+                                results[measure][-1][i],
+                                results[measure][-1][i],
+                            ]
+                        )
+                        for i in range(0, len(results[measure][-1]), 2)
+                    ]
+                )
+
+            vocex_len = np.ceil(vocex_len / 2).astype(int)
+
             # align phoneme boundaries with vocex output
             phoneme_stops = batch["phonetic_detail"][k]["stop"][:-1]
             phoneme_stops = np.round(np.array(phoneme_stops) / original_len * vocex_len)
             phoneme_boundaries.append(phoneme_stops)
             # convert to sequence of 0s and 1s
             phoneme_boundaries[-1] = np.array(
-                [
-                    1 if i in phoneme_boundaries[-1] else 0
-                    for i in range(len(measures["pitch"]))
-                ]
+                [1 if i in phoneme_boundaries[-1] else 0 for i in range(vocex_len)]
             )
 
             # align word boundaries with vocex output
@@ -326,10 +346,7 @@ class BaselineTIMITCollator:
             word_boundaries.append(word_stops)
             # convert to sequence of 0s and 1s
             word_boundaries[-1] = np.array(
-                [
-                    1 if i in word_boundaries[-1] else 0
-                    for i in range(len(measures["pitch"]))
-                ]
+                [1 if i in word_boundaries[-1] else 0 for i in range(vocex_len)]
             )
 
         # pad to max length
@@ -353,7 +370,7 @@ class BaselineTIMITCollator:
             batch["measures"][measure] = torch.tensor(
                 np.array(
                     [
-                        np.pad(r, (0, max_len - r.shape[0]))
+                        np.pad(r, ((0, max_len - r.shape[0]), (0, 0)))
                         for r in batch["measures"][measure]
                     ]
                 )

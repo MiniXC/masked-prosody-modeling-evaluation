@@ -7,6 +7,8 @@ class TrainingArgs:
     lr_schedule: str = "linear_with_warmup"
     lr_warmup_steps: int = 1000
     gradient_clip_val: float = 1.0
+    timit_phon_focal_loss_alpha: float = 0.65
+    timit_word_focal_loss_alpha: float = 0.85
     checkpoint_path: str = "checkpoints"
     output_path: str = "outputs"
     run_name: str = None
@@ -58,7 +60,7 @@ class RAVDESSCollatorArgs:
 @dataclass
 class TIMITCollatorArgs:
     overwrite: bool = False
-    max_frames: int = 768
+    max_frames: int = 384
     vocex: str = "cdminix/vocex"
     vocex_fp16: bool = False
     name: str = "default_timit"

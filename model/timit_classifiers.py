@@ -22,7 +22,7 @@ class PhonemeWordBoundaryClassifier(nn.Module):
         super().__init__()
 
         self.measures = args.measures.split(",")
-        input_size = len(self.measures)
+        input_size = len(self.measures) * 2
 
         if args.type == "mlp":
             self.mlp = nn.Sequential(
@@ -86,7 +86,7 @@ class PhonemeWordBoundaryClassifier(nn.Module):
     @property
     def dummy_input(self):
         torch.manual_seed(0)
-        return torch.randn(1, 256, len(self.measures))
+        return torch.randn(1, 256, len(self.measures) * 2)
 
     def export_onnx(self, path):
         path = Path(path)
