@@ -7,26 +7,34 @@ For the Masked Prosody Modeling code, see **TBD** (link to code).
 ## architecture
 The following updates automatically every time one of the training scripts is run.
 
-## BURN (Boston University Radio News)
+### BURN (Boston University Radio News)
 <details>
 <summary>Click to expand</summary>
 <img src="./figures/model_burn.gv.png"></img>
 </details>
 
-## RAVDESS (Ryerson Audio-Visual Database of Emotional Speech and Song)
+### RAVDESS (Ryerson Audio-Visual Database of Emotional Speech and Song)
 <details>
 <summary>Click to expand</summary>
 <img src="./figures/model_ravdess.gv.png"></img>
 </details>
 
-## TIMIT (Acoustic-Phonetic Continuous Speech Corpus)
+### TIMIT (Acoustic-Phonetic Continuous Speech Corpus)
 <details>
 <summary>Click to expand</summary>
 <img src="./figures/model_timit.gv.png"></img>
 </details>
 
 ## first training batch
+
+### BURN (Boston University Radio News)
 <details>
 <summary>Click to expand</summary>
-<img src="./figures/first_batch.png"></img>
+<img src="./figures/first_batch_burn.png"></img>
+</details>
+
+### RAVDESS (Ryerson Audio-Visual Database of Emotional Speech and Song)
+<details>
+<summary>Click to expand</summary>
+<img src="./figures/first_batch_ravdess.png"></img>
 </details>

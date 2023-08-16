@@ -6,6 +6,8 @@ checkpoints/
 outputs/
 wandb/
 .vscode/
+figures/*
+!figures/*.png
 
 #####################
 # Python            #

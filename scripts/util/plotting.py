@@ -92,7 +92,7 @@ def plot_baseline_ravdess_batch(batch, args: RAVDESSCollatorArgs):
 def plot_baseline_timit_batch(batch, args: TIMITCollatorArgs):
     batch_size = len(batch["audio"])
 
-    fig, axs = plt.subplots(batch_size, 2, figsize=(3, batch_size * 3))
+    fig, axs = plt.subplots(2, batch_size, figsize=(batch_size * 3, 3))
     audios = [a["array"] for a in batch["audio"]]
     srs = [a["sampling_rate"] for a in batch["audio"]]
     # resample to 22050
@@ -120,36 +120,36 @@ def plot_baseline_timit_batch(batch, args: TIMITCollatorArgs):
     # plot, while making sure the sizes are the same for each measure
     # disable ticks
     for i in range(batch_size):
-        axs[i, 0].imshow(mels[i], aspect="auto", origin="lower", interpolation="none")
-        axs[i, 0].set_title("audio")
-        axs[i, 0].set_xticks([])
-        axs[i, 0].set_yticks([])
+        axs[0, i].imshow(mels[i], aspect="auto", origin="lower", interpolation="none")
+        axs[0, i].set_title("audio")
+        axs[0, i].set_xticks([])
+        axs[0, i].set_yticks([])
         sns.lineplot(
             x=range(len(batch["phoneme_boundaries"][i])),
             y=batch["phoneme_boundaries"][i] * 120,
-            ax=axs[i, 0],
+            ax=axs[0, i],
         )
         sns.lineplot(
             x=range(len(batch["word_boundaries"][i])),
             y=batch["word_boundaries"][i] * 120,
-            ax=axs[i, 0],
+            ax=axs[0, i],
         )
         sns.lineplot(
             x=range(len(batch["measures"]["pitch"][i])),
             y=batch["measures"]["pitch"][i].mean(axis=-1),
-            ax=axs[i, 1],
+            ax=axs[1, i],
         )
         sns.lineplot(
             x=range(len(batch["measures"]["energy"][i])),
             y=batch["measures"]["energy"][i].mean(axis=-1),
-            ax=axs[i, 1],
+            ax=axs[1, i],
         )
         sns.lineplot(
             x=range(len(batch["measures"]["voice_activity_binary"][i])),
             y=batch["measures"]["voice_activity_binary"][i].mean(axis=-1),
-            ax=axs[i, 1],
+            ax=axs[1, i],
         )
-        axs[i, 1].set_title("measures")
+        axs[1, i].set_title("measures")
 
     plt.tight_layout()
 
