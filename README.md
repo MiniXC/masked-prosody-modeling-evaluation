@@ -38,3 +38,9 @@ The following updates automatically every time one of the training scripts is ru
 <summary>Click to expand</summary>
 <img src="./figures/first_batch_ravdess.png"></img>
 </details>
+
+### TIMIT (Acoustic-Phonetic Continuous Speech Corpus)
+<details>
+<summary>Click to expand</summary>
+<img src="./figures/first_batch_timit.png"></img>
+</details>
