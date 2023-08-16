@@ -10,19 +10,19 @@ The following updates automatically every time one of the training scripts is ru
 ### BURN (Boston University Radio News)
 <details>
 <summary>Click to expand</summary>
-<img src="./figures/model_burn.gv.png"></img>
+<img src="./figures/model_burn.png"></img>
 </details>
 
 ### RAVDESS (Ryerson Audio-Visual Database of Emotional Speech and Song)
 <details>
 <summary>Click to expand</summary>
-<img src="./figures/model_ravdess.gv.png"></img>
+<img src="./figures/model_ravdess.png"></img>
 </details>
 
 ### TIMIT (Acoustic-Phonetic Continuous Speech Corpus)
 <details>
 <summary>Click to expand</summary>
-<img src="./figures/model_timit.gv.png"></img>
+<img src="./figures/model_timit.png"></img>
 </details>
 
 ## first training batch
