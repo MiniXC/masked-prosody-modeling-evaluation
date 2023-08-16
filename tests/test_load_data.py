@@ -18,26 +18,29 @@ from configs.args import (
 from collators import get_collator
 
 # BURN
-default_args = TrainingArgs()
-default_model_args_burn = BURNModelArgs()
-default_collator_args_burn = BURNCollatorArgs()
-default_collator_args_burn.measures = default_model_args_burn.measures
-default_collator_args_burn.values_per_word = default_model_args_burn.values_per_word
-default_collator_args_burn.overwrite = True
+if os.environ.get("BURN_PATH") is not None:
+    default_args = TrainingArgs()
+    default_model_args_burn = BURNModelArgs()
+    default_collator_args_burn = BURNCollatorArgs()
+    default_collator_args_burn.measures = default_model_args_burn.measures
+    default_collator_args_burn.values_per_word = default_model_args_burn.values_per_word
+    default_collator_args_burn.overwrite = True
 
-train_dataset_burn = load_dataset(
-    default_args.burn_dataset, split=default_args.burn_train_split
-)
-val_dataset = load_dataset(default_args.burn_dataset, split=default_args.burn_val_split)
+    train_dataset_burn = load_dataset(
+        default_args.burn_dataset, split=default_args.burn_train_split
+    )
+    val_dataset = load_dataset(
+        default_args.burn_dataset, split=default_args.burn_val_split
+    )
 
-collator = get_collator(default_collator_args_burn)
+    collator = get_collator(default_collator_args_burn)
 
-dataloader_burn = DataLoader(
-    train_dataset_burn,
-    batch_size=default_args.batch_size,
-    shuffle=True,
-    collate_fn=collator,
-)
+    dataloader_burn = DataLoader(
+        train_dataset_burn,
+        batch_size=default_args.batch_size,
+        shuffle=True,
+        collate_fn=collator,
+    )
 
 
 def test_dataloader_burn():
@@ -49,3 +52,6 @@ def test_dataloader_burn():
                 default_collator_args_burn.values_per_word,
             )
             break
+
+
+# TODO: add tests for other datasets
