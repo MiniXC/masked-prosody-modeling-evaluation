@@ -1,3 +1,4 @@
+import os
 import sys
 
 sys.path.append(".")  # add root of project to path
@@ -40,10 +41,11 @@ dataloader_burn = DataLoader(
 
 
 def test_dataloader_burn():
-    for batch in dataloader_burn:
-        assert batch["measures"]["pitch"].shape == (
-            default_args.batch_size,
-            default_collator_args_burn.max_words,
-            default_collator_args_burn.values_per_word,
-        )
-        break
+    if os.environ.get("BURN_PATH") is not None:
+        for batch in dataloader_burn:
+            assert batch["measures"]["pitch"].shape == (
+                default_args.batch_size,
+                default_collator_args_burn.max_words,
+                default_collator_args_burn.values_per_word,
+            )
+            break
