@@ -76,15 +76,15 @@ class BaselineBURNCollator:
                         v = np.zeros_like(v)
                     else:
                         if m == "pitch":
-                            v = torch.clip(
-                                v, self.args.pitch_min, self.args.pitch_max
-                            ) / (self.args.pitch_max - self.args.pitch_min)
+                            v = np.clip(v, self.args.pitch_min, self.args.pitch_max) / (
+                                self.args.pitch_max - self.args.pitch_min
+                            )
                         elif m == "energy":
-                            v = torch.clip(
+                            v = np.clip(
                                 v, self.args.energy_min, self.args.energy_max
                             ) / (self.args.energy_max - self.args.energy_min)
                         elif m == "voice_activity_binary":
-                            v = torch.clip(v, self.args.vad_min, self.args.vad_max) / (
+                            v = np.clip(v, self.args.vad_min, self.args.vad_max) / (
                                 self.args.vad_max - self.args.vad_min
                             )
                     measures[m] = v
@@ -378,15 +378,15 @@ class BaselineRAVDESSCollator:
                         v = np.zeros_like(v)
                     else:
                         if measure == "pitch":
-                            v = torch.clip(
-                                v, self.args.pitch_min, self.args.pitch_max
-                            ) / (self.args.pitch_max - self.args.pitch_min)
+                            v = np.clip(v, self.args.pitch_min, self.args.pitch_max) / (
+                                self.args.pitch_max - self.args.pitch_min
+                            )
                         elif measure == "energy":
-                            v = torch.clip(
+                            v = np.clip(
                                 v, self.args.energy_min, self.args.energy_max
                             ) / (self.args.energy_max - self.args.energy_min)
                         elif measure == "voice_activity_binary":
-                            v = torch.clip(v, self.args.vad_min, self.args.vad_max) / (
+                            v = np.clip(v, self.args.vad_min, self.args.vad_max) / (
                                 self.args.vad_max - self.args.vad_min
                             )
                     measures[measure] = v
@@ -600,15 +600,15 @@ class BaselineTIMITCollator:
                         v = np.zeros_like(v)
                     else:
                         if measure == "pitch":
-                            v = torch.clip(
-                                v, self.args.pitch_min, self.args.pitch_max
-                            ) / (self.args.pitch_max - self.args.pitch_min)
+                            v = np.clip(v, self.args.pitch_min, self.args.pitch_max) / (
+                                self.args.pitch_max - self.args.pitch_min
+                            )
                         elif measure == "energy":
-                            v = torch.clip(
+                            v = np.clip(
                                 v, self.args.energy_min, self.args.energy_max
                             ) / (self.args.energy_max - self.args.energy_min)
                         elif measure == "voice_activity_binary":
-                            v = torch.clip(v, self.args.vad_min, self.args.vad_max) / (
+                            v = np.clip(v, self.args.vad_min, self.args.vad_max) / (
                                 self.args.vad_max - self.args.vad_min
                             )
                     measures[measure] = v
