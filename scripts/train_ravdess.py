@@ -34,6 +34,7 @@ from configs.args import (
 from configs.validation import validate_args
 from util.remote import wandb_update_config, wandb_init, push_to_hub
 from util.plotting import plot_baseline_ravdess_batch as plot_baseline_batch
+from util.plotting import plot_prosody_model_ravdess_batch as plot_prosody_model_batch
 from model.ravdess_classifiers import EmotionClassifier
 from collators import get_collator
 
@@ -124,13 +125,16 @@ def train_epoch(epoch):
     last_loss = None
     for batch in train_dl:
         with accelerator.accumulate(model):
-            x = torch.cat(
-                [
-                    batch["measures"][m].unsqueeze(-1)
-                    for m in model_args.measures.split(",")
-                ],
-                dim=-1,
-            )
+            if not training_args.use_mpm:
+                x = torch.cat(
+                    [
+                        batch["measures"][m].unsqueeze(-1)
+                        for m in model_args.measures.split(",")
+                    ],
+                    dim=-1,
+                )
+            else:
+                x = batch["mpm"]
             y = model(x)
             loss = torch.nn.functional.cross_entropy(y, batch["emotion_onehot"])
             accelerator.backward(loss)
@@ -189,13 +193,16 @@ def evaluate():
     console_rule("Evaluation")
     with torch.no_grad():
         for batch in val_dl:
-            x = torch.cat(
-                [
-                    batch["measures"][m].unsqueeze(-1)
-                    for m in model_args.measures.split(",")
-                ],
-                dim=-1,
-            )
+            if not training_args.use_mpm:
+                x = torch.cat(
+                    [
+                        batch["measures"][m].unsqueeze(-1)
+                        for m in model_args.measures.split(",")
+                    ],
+                    dim=-1,
+                )
+            else:
+                x = batch["mpm"]
             y = model(x)
             loss = torch.nn.functional.cross_entropy(y, batch["emotion_onehot"])
             losses.append(loss.detach())
@@ -226,13 +233,16 @@ def evaluate_loss_only():
     console_rule("Evaluation")
     with torch.no_grad():
         for batch in val_dl:
-            x = torch.cat(
-                [
-                    batch["measures"][m].unsqueeze(-1)
-                    for m in model_args.measures.split(",")
-                ],
-                dim=-1,
-            )
+            if not training_args.use_mpm:
+                x = torch.cat(
+                    [
+                        batch["measures"][m].unsqueeze(-1)
+                        for m in model_args.measures.split(",")
+                    ],
+                    dim=-1,
+                )
+            else:
+                x = batch["mpm"]
             y = model(x)
             loss = torch.nn.functional.cross_entropy(y, batch["emotion_onehot"])
             losses.append(loss.detach())
@@ -313,9 +323,21 @@ def main():
             {
                 "training": training_args,
                 "model": model_args,
+                "collator": collator_args,
             }
         )
     collator_args.measures = model_args.measures
+    model_args.use_mpm = training_args.use_mpm
+    collator_args.overwrite = training_args.overwrite_data
+    if training_args.use_mpm:
+        collator_args.name = collator_args.name.replace("default", "prosody_model")
+        bins = training_args.mpm_bin_size
+        mask = training_args.mpm_mask_size
+        step = training_args.mpm_checkpoint_step
+        collator_args.mpm = (
+            f"masked-prosody-modeling/checkpoints/bin{bins}_mask{mask}/step_{step}"
+        )
+
     validate_args(training_args, model_args, collator_args)
 
     # Distribution Information
@@ -375,6 +397,9 @@ def main():
                 if is_first_batch:
                     if collator_args.name == "default_ravdess":
                         fig = plot_baseline_batch(batch, collator_args)
+                        plt.savefig("figures/first_batch_ravdess.png")
+                    elif collator_args.name == "prosody_model_ravdess":
+                        fig = plot_prosody_model_batch(batch, collator_args)
                         plt.savefig("figures/first_batch_ravdess.png")
                     wandb.log({"first_batch": wandb.Image(fig)})
                     is_first_batch = False

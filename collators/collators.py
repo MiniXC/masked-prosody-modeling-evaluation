@@ -71,11 +71,22 @@ class BaselineBURNCollator:
                         .squeeze(0)
                         .T.numpy()
                     )
-                    # min-max normalize
+                    # normalize
                     if (v.max() - v.min()) == 0:
                         v = np.zeros_like(v)
                     else:
-                        v = (v - v.min()) / (v.max() - v.min())
+                        if m == "pitch":
+                            v = torch.clip(
+                                v, self.args.pitch_min, self.args.pitch_max
+                            ) / (self.args.pitch_max - self.args.pitch_min)
+                        elif m == "energy":
+                            v = torch.clip(
+                                v, self.args.energy_min, self.args.energy_max
+                            ) / (self.args.energy_max - self.args.energy_min)
+                        elif m == "voice_activity_binary":
+                            v = torch.clip(v, self.args.vad_min, self.args.vad_max) / (
+                                self.args.vad_max - self.args.vad_min
+                            )
                     measures[m] = v
 
                 # take the mean according to batch["word_durations"] (an int in frames)
@@ -366,7 +377,18 @@ class BaselineRAVDESSCollator:
                     if (v.max() - v.min()) == 0:
                         v = np.zeros_like(v)
                     else:
-                        v = (v - v.min()) / (v.max() - v.min())
+                        if measure == "pitch":
+                            v = torch.clip(
+                                v, self.args.pitch_min, self.args.pitch_max
+                            ) / (self.args.pitch_max - self.args.pitch_min)
+                        elif measure == "energy":
+                            v = torch.clip(
+                                v, self.args.energy_min, self.args.energy_max
+                            ) / (self.args.energy_max - self.args.energy_min)
+                        elif measure == "voice_activity_binary":
+                            v = torch.clip(v, self.args.vad_min, self.args.vad_max) / (
+                                self.args.vad_max - self.args.vad_min
+                            )
                     measures[measure] = v
 
                     np.save(
@@ -577,7 +599,18 @@ class BaselineTIMITCollator:
                     if (v.max() - v.min()) == 0:
                         v = np.zeros_like(v)
                     else:
-                        v = (v - v.min()) / (v.max() - v.min())
+                        if measure == "pitch":
+                            v = torch.clip(
+                                v, self.args.pitch_min, self.args.pitch_max
+                            ) / (self.args.pitch_max - self.args.pitch_min)
+                        elif measure == "energy":
+                            v = torch.clip(
+                                v, self.args.energy_min, self.args.energy_max
+                            ) / (self.args.energy_max - self.args.energy_min)
+                        elif measure == "voice_activity_binary":
+                            v = torch.clip(v, self.args.vad_min, self.args.vad_max) / (
+                                self.args.vad_max - self.args.vad_min
+                            )
                     measures[measure] = v
 
                     np.save(
@@ -706,7 +739,6 @@ class ProsodyModelTIMITCollator:
                 pitch = vocex_output["measures"]["pitch"]
                 energy = vocex_output["measures"]["energy"]
                 vad = vocex_output["measures"]["voice_activity_binary"]
-                vocex_len = len(pitch)
                 # normalize using pitch_min, pitch_max, energy_min, energy_max, vad_min, vad_max
                 pitch = torch.clip(pitch, self.args.pitch_min, self.args.pitch_max) / (
                     self.args.pitch_max - self.args.pitch_min
@@ -749,11 +781,28 @@ class ProsodyModelTIMITCollator:
                         ],
                         dim=-1,
                     )
+                elif mpm_input.shape[-1] > self.mpm.args.max_length:
+                    mpm_input = mpm_input[:, :, : self.mpm.args.max_length]
                 mpm_output = self.mpm(
                     mpm_input.long(), return_layer=self.args.mpm_layer
                 )
                 out = mpm_output["representations"]
-                out = out[0, :prev_len, :]
+                if prev_len < self.mpm.args.max_length:
+                    out = out[0, :prev_len, :]
+                else:
+                    # pad
+                    out = torch.cat(
+                        [
+                            out[0, :prev_len, :],
+                            torch.zeros(
+                                (
+                                    prev_len - self.mpm.args.max_length,
+                                    out.shape[-1],
+                                )
+                            ),
+                        ],
+                        dim=0,
+                    )
                 np.save(
                     Path(audio_path).with_suffix(f".mpm.npy"),
                     out,
@@ -763,16 +812,17 @@ class ProsodyModelTIMITCollator:
             results.append(out)
 
             # fold up results such the the length is half the original length, but we have an additional dimension
+
             results[-1] = np.array(
                 [
-                    np.array(
+                    np.concatenate(
                         [
                             results[-1][i],
                             results[-1][i + 1],
                         ]
                     )
                     if i + 1 < len(results[-1])
-                    else np.array(
+                    else np.concatenate(
                         [
                             results[-1][i],
                             results[-1][i],
@@ -782,7 +832,7 @@ class ProsodyModelTIMITCollator:
                 ]
             )
 
-            vocex_len = np.ceil(vocex_len / 2).astype(int)
+            vocex_len = len(results[-1])
 
             # align phoneme boundaries with vocex output
             phoneme_stops = batch["phonetic_detail"][k]["stop"][:-1]

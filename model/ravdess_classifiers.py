@@ -21,8 +21,11 @@ class EmotionClassifier(nn.Module):
     ):
         super().__init__()
 
-        self.measures = args.measures.split(",")
-        input_size = len(self.measures)
+        if not args.use_mpm:
+            self.measures = args.measures.split(",")
+            input_size = len(self.measures)
+        else:
+            input_size = 256
 
         if args.type == "mlp":
             self.mlp = nn.Sequential(
@@ -45,18 +48,23 @@ class EmotionClassifier(nn.Module):
                 self.mlp.add_module(f"layer_{n}_gelu", nn.GELU())
                 self.mlp.add_module(f"layer_{n}_dropout", nn.Dropout(args.dropout))
 
-        self.final_linear = nn.Sequential(
-            nn.Linear(args.hidden_dim * 2, args.hidden_dim),
-            nn.GELU(),
-            nn.Dropout(args.dropout),
-            nn.Linear(args.hidden_dim, 8),
-        )
+            self.final_linear = nn.Sequential(
+                nn.Linear(args.hidden_dim * 2, args.hidden_dim),
+                nn.GELU(),
+                nn.Dropout(args.dropout),
+                nn.Linear(args.hidden_dim, 8),
+            )
+
+        if args.type == "linear":
+            self.final_linear = nn.Linear(input_size * 2, 8)
 
         self.args = args
 
     def forward(self, x):
         if self.args.type == "mlp":
             x = self.mlp(x)
+        elif self.args.type == "linear":
+            pass  # only use final_linear
         x = torch.cat(
             [
                 x.mean(dim=1),
@@ -99,7 +107,10 @@ class EmotionClassifier(nn.Module):
     @property
     def dummy_input(self):
         torch.manual_seed(0)
-        return torch.randn(1, 256, len(self.measures))
+        if not self.args.use_mpm:
+            return torch.randn(1, 256, len(self.measures))
+        else:
+            return torch.randn(1, 256, 256)
 
     def export_onnx(self, path):
         path = Path(path)

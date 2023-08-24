@@ -26,7 +26,7 @@ class TrainingArgs:
     ravdess_val_split: str = "train[90%:]"
     timit_dataset: str = "timit_asr"
     timit_train_split: str = "train"
-    timit_val_split: str = "test"
+    timit_val_split: str = "test[:10%]"
     log_every_n_steps: int = 10
     do_full_eval: bool = True
     do_save: bool = False
