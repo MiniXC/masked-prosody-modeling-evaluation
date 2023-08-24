@@ -7,6 +7,6 @@ n_layers: 2
 wandb_project: "masked-prosody-modeling"
 wandb_mode: "online"
 type: "linear"
-use_mpm: False
+use_mpm: True
 overwrite_data: True
 mpm_layer: 7
