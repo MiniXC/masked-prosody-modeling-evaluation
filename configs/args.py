@@ -37,33 +37,59 @@ class TrainingArgs:
     push_to_hub: bool = False
     hub_repo: str = None
     drop_last: bool = False
+    overwrite_data: bool = False
+    use_mpm: bool = False
+    mpm_bin_size: int = 128
+    mpm_mask_size: int = 16
+    mpm_checkpoint_step: int = 10000
 
 
 @dataclass
 class BURNCollatorArgs:
-    overwrite: bool = False
     max_words: int = 256
     name: str = "default_burn"
     vocex: str = "cdminix/vocex"
     vocex_fp16: bool = False
+    mpm: str = None
+    mpm_layer: int = -1
+    pitch_min: float = 50
+    pitch_max: float = 400
+    energy_min: float = 0
+    energy_max: float = 1
+    vad_min: float = 0
+    vad_max: float = 1
 
 
 @dataclass
 class RAVDESSCollatorArgs:
-    overwrite: bool = False
     max_frames: int = 512
     vocex: str = "cdminix/vocex"
     vocex_fp16: bool = False
     name: str = "default_ravdess"
+    mpm: str = None
+    mpm_layer: int = -1
+    pitch_min: float = 50
+    pitch_max: float = 400
+    energy_min: float = 0
+    energy_max: float = 1
+    vad_min: float = 0
+    vad_max: float = 1
 
 
 @dataclass
 class TIMITCollatorArgs:
-    overwrite: bool = False
     max_frames: int = 384
     vocex: str = "cdminix/vocex"
     vocex_fp16: bool = False
     name: str = "default_timit"
+    mpm: str = None
+    mpm_layer: int = -1
+    pitch_min: float = 50
+    pitch_max: float = 400
+    energy_min: float = 0
+    energy_max: float = 1
+    vad_min: float = 0
+    vad_max: float = 1
 
 
 @dataclass

@@ -30,6 +30,7 @@ from configs.args import TrainingArgs, BURNModelArgs, BURNCollatorArgs as Collat
 from configs.validation import validate_args
 from util.remote import wandb_update_config, wandb_init, push_to_hub
 from util.plotting import plot_baseline_burn_batch as plot_baseline_batch
+from util.plotting import plot_prosody_model_burn_batch as plot_prosody_model_batch
 from model.burn_classifiers import BreakProminenceClassifier
 from collators import get_collator
 
@@ -122,9 +123,13 @@ def train_epoch(epoch):
     last_loss = None
     for batch in train_dl:
         with accelerator.accumulate(model):
-            x = torch.cat(
-                [batch["measures"][m] for m in model_args.measures.split(",")], dim=-1
-            )
+            if not model_args.use_mpm:
+                x = torch.cat(
+                    [batch["measures"][m] for m in model_args.measures.split(",")],
+                    dim=-1,
+                )
+            else:
+                x = batch["mpm"]
             y = model(x)
             prom_loss = torch.nn.functional.binary_cross_entropy_with_logits(
                 y[:, :, 0], batch["prominence"].float(), reduction="none"
@@ -212,9 +217,13 @@ def evaluate():
     console_rule("Evaluation")
     with torch.no_grad():
         for batch in val_dl:
-            x = torch.cat(
-                [batch["measures"][m] for m in model_args.measures.split(",")], dim=-1
-            )
+            if not model_args.use_mpm:
+                x = torch.cat(
+                    [batch["measures"][m] for m in model_args.measures.split(",")],
+                    dim=-1,
+                )
+            else:
+                x = batch["mpm"]
             y = model(x)
             prom_loss = torch.nn.functional.binary_cross_entropy_with_logits(
                 y[:, :, 0], batch["prominence"].float(), reduction="none"
@@ -275,9 +284,13 @@ def evaluate_loss_only():
     console_rule("Evaluation")
     with torch.no_grad():
         for batch in val_dl:
-            x = torch.cat(
-                [batch["measures"][m] for m in model_args.measures.split(",")], dim=-1
-            )
+            if not model_args.use_mpm:
+                x = torch.cat(
+                    [batch["measures"][m] for m in model_args.measures.split(",")],
+                    dim=-1,
+                )
+            else:
+                x = batch["mpm"]
             y = model(x)
             prom_loss = torch.nn.functional.binary_cross_entropy_with_logits(
                 y[:, :, 0], batch["prominence"].float(), reduction="none"
@@ -378,10 +391,23 @@ def main():
             {
                 "training": training_args,
                 "model": model_args,
+                "collator": collator_args,
             }
         )
     collator_args.values_per_word = model_args.values_per_word
     collator_args.measures = model_args.measures
+
+    model_args.use_mpm = training_args.use_mpm
+    collator_args.overwrite = training_args.overwrite_data
+    if training_args.use_mpm:
+        collator_args.name = collator_args.name.replace("default", "prosody_model")
+        bins = training_args.mpm_bin_size
+        mask = training_args.mpm_mask_size
+        step = training_args.mpm_checkpoint_step
+        collator_args.mpm = (
+            f"masked-prosody-modeling/checkpoints/bin{bins}_mask{mask}/step_{step}"
+        )
+
     validate_args(training_args, model_args, collator_args)
 
     # Distribution Information
@@ -430,7 +456,7 @@ def main():
         collate_fn=collator,
     )
 
-    if collator_args.overwrite:
+    if training_args.overwrite_data:
         console_print(f"[yellow]WARNING[/yellow]: overwriting features")
     if accelerator.is_main_process:
         console_print(f"[green]collator[/green]: doing test run over datasets")
@@ -440,6 +466,9 @@ def main():
                 if is_first_batch:
                     if collator_args.name == "default_burn":
                         fig = plot_baseline_batch(batch, collator_args)
+                        plt.savefig("figures/first_batch_burn.png")
+                    elif collator_args.name == "prosody_model_burn":
+                        fig = plot_prosody_model_batch(batch, collator_args)
                         plt.savefig("figures/first_batch_burn.png")
                     wandb.log({"first_batch": wandb.Image(fig)})
                     is_first_batch = False

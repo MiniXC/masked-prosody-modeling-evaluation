@@ -1,4 +1,10 @@
-from .args import TrainingArgs, BURNModelArgs, BURNCollatorArgs, RAVDESSCollatorArgs
+from .args import (
+    TrainingArgs,
+    BURNModelArgs,
+    BURNCollatorArgs,
+    RAVDESSCollatorArgs,
+    TIMITCollatorArgs,
+)
 
 
 def validate_args(*args):
@@ -17,8 +23,19 @@ def validate_args(*args):
         if isinstance(arg, BURNModelArgs):
             if arg.hidden_dim % 2 != 0:
                 raise ValueError("hidden_dim should be divisible by 2")
-        if isinstance(arg, BURNCollatorArgs) or isinstance(arg, RAVDESSCollatorArgs):
-            if arg.name not in ["default_burn", "default_ravdess"]:
+        if (
+            isinstance(arg, BURNCollatorArgs)
+            or isinstance(arg, RAVDESSCollatorArgs)
+            or isinstance(arg, TIMITCollatorArgs)
+        ):
+            if arg.name not in [
+                "default_burn",
+                "default_ravdess",
+                "default_timit",
+                "prosody_model_burn",
+                "prosody_model_ravdess",
+                "prosody_model_timit",
+            ]:
                 raise ValueError(f"collator {arg.name} not supported")
             for measure in arg.measures.split(","):
                 if measure not in [

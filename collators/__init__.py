@@ -6,9 +6,11 @@ from .collators import (
     BaselineBURNCollator,
     BaselineRAVDESSCollator,
     BaselineTIMITCollator,
+    ProsodyModelBURNCollator,
+    ProsodyModelRAVDESSCollator,
+    ProsodyModelTIMITCollator,
 )
 from configs.args import BURNCollatorArgs, RAVDESSCollatorArgs, TIMITCollatorArgs
-import torch
 
 
 def get_collator(args: Union[TIMITCollatorArgs, BURNCollatorArgs, RAVDESSCollatorArgs]):
@@ -16,4 +18,7 @@ def get_collator(args: Union[TIMITCollatorArgs, BURNCollatorArgs, RAVDESSCollato
         "default_burn": BaselineBURNCollator,
         "default_ravdess": BaselineRAVDESSCollator,
         "default_timit": BaselineTIMITCollator,
+        "prosody_model_burn": ProsodyModelBURNCollator,
+        "prosody_model_ravdess": ProsodyModelRAVDESSCollator,
+        "prosody_model_timit": ProsodyModelTIMITCollator,
     }[args.name](args)

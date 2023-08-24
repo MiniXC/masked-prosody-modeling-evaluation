@@ -21,8 +21,8 @@ import numpy as np
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from tqdm.auto import tqdm
 import yaml
-from rich.console import Console
 import matplotlib.pyplot as plt
+from rich.console import Console
 
 console = Console()
 
@@ -456,8 +456,9 @@ def main():
         collate_fn=collator,
     )
 
-    if collator_args.overwrite:
+    if training_args.overwrite_data:
         console_print(f"[yellow]WARNING[/yellow]: overwriting features")
+        collator.args.overwrite = True
     if accelerator.is_main_process:
         console_print(f"[green]collator[/green]: doing test run over datasets")
         is_first_batch = True

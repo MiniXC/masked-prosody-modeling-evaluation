@@ -21,8 +21,11 @@ class BreakProminenceClassifier(nn.Module):
     ):
         super().__init__()
 
-        self.measures = args.measures.split(",")
-        input_size = len(self.measures) * args.values_per_word
+        if not args.use_mpm:
+            self.measures = args.measures.split(",")
+            input_size = len(self.measures) * args.values_per_word
+        else:
+            input_size = 512
 
         if args.type == "mlp":
             self.mlp = nn.Sequential(
@@ -46,12 +49,16 @@ class BreakProminenceClassifier(nn.Module):
                 self.mlp.add_module(f"layer_{n}_dropout", nn.Dropout(args.dropout))
 
             self.mlp.add_module("layer_out_linear", nn.Linear(args.hidden_dim, 2))
+        if args.type == "linear":
+            self.linear = nn.Linear(input_size, 2)
 
         self.args = args
 
     def forward(self, x):
         if self.args.type == "mlp":
             return self.mlp(x)
+        elif self.args.type == "linear":
+            return self.linear(x)
 
     def save_model(self, path, accelerator=None, onnx=False):
         path = Path(path)
@@ -86,7 +93,10 @@ class BreakProminenceClassifier(nn.Module):
     @property
     def dummy_input(self):
         torch.manual_seed(0)
-        return torch.randn(1, 256, self.args.values_per_word * len(self.measures))
+        if not self.args.use_mpm:
+            return torch.randn(1, 256, self.args.values_per_word * len(self.measures))
+        else:
+            return torch.randn(1, 256, 512)
 
     def export_onnx(self, path):
         path = Path(path)
