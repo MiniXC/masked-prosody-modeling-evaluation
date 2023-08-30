@@ -448,6 +448,7 @@ def main():
         shuffle=True,
         collate_fn=collator,
         drop_last=training_args.drop_last,
+        num_workers=os.cpu_count(),
     )
 
     val_dl = DataLoader(
@@ -455,6 +456,7 @@ def main():
         batch_size=training_args.batch_size,
         shuffle=False,
         collate_fn=collator,
+        num_workers=os.cpu_count(),
     )
 
     if training_args.overwrite_data:
