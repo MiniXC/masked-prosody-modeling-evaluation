@@ -493,6 +493,23 @@ def main():
                     is_first_batch = False
     collator.args.overwrite = False
 
+    if training_args.num_workers is not None:
+        # go back to single accelerator-managed for model
+        train_dl = DataLoader(
+            train_ds,
+            batch_size=training_args.batch_size,
+            shuffle=True,
+            collate_fn=collator,
+            drop_last=training_args.drop_last,
+        )
+
+        val_dl = DataLoader(
+            val_ds,
+            batch_size=training_args.batch_size,
+            shuffle=False,
+            collate_fn=collator,
+        )
+
     # optimizer
     optimizer = torch.optim.AdamW(model.parameters(), lr=training_args.lr)
 
