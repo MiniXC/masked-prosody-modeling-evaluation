@@ -1,0 +1,13 @@
+lr: 1.0e-3
+lr_schedule: "linear_with_warmup"
+lr_warmup_steps: 100
+n_steps: 1000
+log_every: 10
+hidden_dim: 512
+n_layers: 2
+wandb_project: "masked-prosody-modeling"
+wandb_mode: "offline"
+type: "lstm"
+use_mpm: True
+overwrite_data: False
+mpm_layer: 7

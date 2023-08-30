@@ -49,16 +49,46 @@ class BreakProminenceClassifier(nn.Module):
                 self.mlp.add_module(f"layer_{n}_dropout", nn.Dropout(args.dropout))
 
             self.mlp.add_module("layer_out_linear", nn.Linear(args.hidden_dim, 2))
-        if args.type == "linear":
+        elif args.type == "linear":
             self.linear = nn.Linear(input_size, 2)
+        elif args.type == "lstm":
+            self.lstm = nn.LSTM(
+                input_size=input_size,
+                hidden_size=args.hidden_dim,
+                num_layers=args.n_layers,
+                bidirectional=True,
+                batch_first=True,
+            )
+            self.linear = nn.Linear(args.hidden_dim * 2, 2)
+
+        self._init_weights(self)
 
         self.args = args
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            nn.init.xavier_uniform_(module.weight)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            nn.init.ones_(module.weight)
+            nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.LSTM):
+            for name, param in module.named_parameters():
+                if "weight" in name:
+                    nn.init.xavier_uniform_(param)
+                elif "bias" in name:
+                    nn.init.zeros_(param)
 
     def forward(self, x):
         if self.args.type == "mlp":
             return self.mlp(x)
         elif self.args.type == "linear":
             return self.linear(x)
+        elif self.args.type == "lstm":
+            x, _ = self.lstm(x)
+            x = self.linear(x)
+            return x
 
     def save_model(self, path, accelerator=None, onnx=False):
         path = Path(path)

@@ -152,6 +152,7 @@ def train_epoch(epoch):
                 / break_loss.shape[-1]
                 / break_loss.shape[0]
             )
+            print(prom_loss, break_loss)
             loss = (break_loss + prom_loss) / 2
             accelerator.backward(loss)
             accelerator.clip_grad_norm_(

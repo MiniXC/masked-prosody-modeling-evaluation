@@ -51,6 +51,16 @@ class PhonemeWordBoundaryClassifier(nn.Module):
             self.mlp.add_module("layer_out_linear", nn.Linear(args.hidden_dim, 2))
         elif args.type == "linear":
             self.linear = nn.Linear(input_size, 2)
+        elif args.type == "lstm":
+            self.lstm = nn.LSTM(
+                input_size=input_size,
+                hidden_size=args.hidden_dim,
+                num_layers=args.n_layers,
+                bidirectional=True,
+                batch_first=True,
+                dropout=args.dropout,
+            )
+            self.linear = nn.Linear(args.hidden_dim * 2, 2)
 
         self.args = args
 
@@ -58,6 +68,9 @@ class PhonemeWordBoundaryClassifier(nn.Module):
         if self.args.type == "mlp":
             return self.mlp(x)
         elif self.args.type == "linear":
+            return self.linear(x)
+        elif self.args.type == "lstm":
+            x, _ = self.lstm(x)
             return self.linear(x)
 
     def save_model(self, path, accelerator=None, onnx=False):

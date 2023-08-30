@@ -54,25 +54,54 @@ class EmotionClassifier(nn.Module):
                 nn.Dropout(args.dropout),
                 nn.Linear(args.hidden_dim, 8),
             )
-
-        if args.type == "linear":
+        elif args.type == "linear":
             self.final_linear = nn.Linear(input_size * 2, 8)
+        elif args.type == "lstm":
+            self.lstm = nn.LSTM(
+                input_size=input_size,
+                hidden_size=args.hidden_dim,
+                num_layers=args.n_layers,
+                bidirectional=True,
+                batch_first=True,
+                dropout=args.dropout,
+            )
+            # instead doing mean and max pooling, we can use attention
+            self.attention = nn.Sequential(
+                nn.Linear(args.hidden_dim * 2, args.hidden_dim),
+                nn.Tanh(),
+                nn.Linear(args.hidden_dim, 1),
+            )
+            self.final_linear = nn.Linear(args.hidden_dim * 2, 8)
 
         self.args = args
 
     def forward(self, x):
         if self.args.type == "mlp":
             x = self.mlp(x)
+            x = torch.cat(
+                [
+                    x.mean(dim=1),
+                    x.max(dim=1).values,
+                ],
+                dim=-1,
+            )
+            return self.final_linear(x)
         elif self.args.type == "linear":
             pass  # only use final_linear
-        x = torch.cat(
-            [
-                x.mean(dim=1),
-                x.max(dim=1).values,
-            ],
-            dim=-1,
-        )
-        return self.final_linear(x)
+            x = torch.cat(
+                [
+                    x.mean(dim=1),
+                    x.max(dim=1).values,
+                ],
+                dim=-1,
+            )
+            return self.final_linear(x)
+        elif self.args.type == "lstm":
+            x, _ = self.lstm(x)
+            attention = self.attention(x)
+            attention = torch.softmax(attention, dim=1)
+            x = (x * attention).sum(dim=1)
+            return self.final_linear(x)
 
     def save_model(self, path, accelerator=None, onnx=False):
         path = Path(path)

@@ -25,7 +25,7 @@ class TrainingArgs:
     ravdess_train_split: str = "train[:90%]"
     ravdess_val_split: str = "train[90%:]"
     timit_dataset: str = "timit_asr"
-    timit_train_split: str = "train"
+    timit_train_split: str = "train[:50%]"
     timit_val_split: str = "test[:10%]"
     log_every_n_steps: int = 10
     do_full_eval: bool = True
@@ -39,8 +39,8 @@ class TrainingArgs:
     drop_last: bool = False
     overwrite_data: bool = False
     use_mpm: bool = False
-    mpm_bin_size: int = 128
-    mpm_mask_size: int = 16
+    mpm_bin_size: str = "128"
+    mpm_mask_size: str = "16"
     mpm_checkpoint_step: int = 10000
 
 
@@ -118,3 +118,10 @@ class TIMITModelArgs:
     measures: str = "pitch,energy,voice_activity_binary"
     type: str = "mlp"  # can be "mlp" or "transformer"
     dropout: float = 0.1
+
+
+@dataclass
+class HeatmapArgs:
+    type: str = "intrinsic"  # can be "intrinsic" or "extrinsic"
+    measure: str = "vad_mae"
+    dataset: str = "burn"
