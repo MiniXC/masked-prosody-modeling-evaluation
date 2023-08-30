@@ -11,3 +11,4 @@ type: "lstm"
 use_mpm: True
 overwrite_data: False
 mpm_layer: 7
+num_workers: 32

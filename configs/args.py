@@ -18,6 +18,7 @@ class TrainingArgs:
     n_steps: int = 2000
     batch_size: int = 32
     seed: int = 0
+    num_workers: int = None
     burn_dataset: str = "cdminix/bu_radio"
     burn_train_split: str = "train[:90%]"
     burn_val_split: str = "train[90%:]"

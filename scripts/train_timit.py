@@ -462,20 +462,38 @@ def main():
     collator = get_collator(collator_args)
 
     # dataloader
-    train_dl = DataLoader(
-        train_ds,
-        batch_size=training_args.batch_size,
-        shuffle=True,
-        collate_fn=collator,
-        drop_last=training_args.drop_last,
-    )
+    if training_args.num_workers is None:
+        train_dl = DataLoader(
+            train_ds,
+            batch_size=training_args.batch_size,
+            shuffle=True,
+            collate_fn=collator,
+            drop_last=training_args.drop_last,
+        )
 
-    val_dl = DataLoader(
-        val_ds,
-        batch_size=training_args.batch_size,
-        shuffle=False,
-        collate_fn=collator,
-    )
+        val_dl = DataLoader(
+            val_ds,
+            batch_size=training_args.batch_size,
+            shuffle=False,
+            collate_fn=collator,
+        )
+    else:
+        train_dl = DataLoader(
+            train_ds,
+            batch_size=training_args.batch_size,
+            shuffle=True,
+            collate_fn=collator,
+            drop_last=training_args.drop_last,
+            num_workers=training_args.num_workers,
+        )
+
+        val_dl = DataLoader(
+            val_ds,
+            batch_size=training_args.batch_size,
+            shuffle=False,
+            collate_fn=collator,
+            num_workers=training_args.num_workers,
+        )
 
     if training_args.overwrite_data:
         console_print(f"[yellow]WARNING[/yellow]: overwriting features")
