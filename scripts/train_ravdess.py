@@ -335,7 +335,7 @@ def main():
         mask = training_args.mpm_mask_size
         step = training_args.mpm_checkpoint_step
         collator_args.mpm = (
-            f"masked-prosody-modeling/checkpoints/bin{bins}_mask{mask}/step_{step}"
+            f"mpm_checkpoints/bin{bins}_mask{mask}/step_{step}"
         )
 
     validate_args(training_args, model_args, collator_args)

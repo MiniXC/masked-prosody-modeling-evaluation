@@ -132,25 +132,11 @@ def train_epoch(epoch):
             else:
                 x = batch["mpm"]
             y = model(x)
-            # prom_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-            #     y[:, :, 0], batch["prominence"].float(), reduction="none"
-            # )
-            # break_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-            #     y[:, :, 1], batch["break"].float(), reduction="none"
-            # )
-            prom_loss = torchvision.ops.focal_loss.sigmoid_focal_loss(
-                y[:, :, 0],
-                batch["prominence"].float(),
-                reduction="none",
-                alpha=training_args.burn_focal_loss_alpha,
-                gamma=training_args.burn_focal_loss_gamma,
+            prom_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                y[:, :, 0], batch["prominence"].float(), reduction="none"
             )
-            break_loss = torchvision.ops.focal_loss.sigmoid_focal_loss(
-                y[:, :, 1],
-                batch["break"].float(),
-                reduction="none",
-                alpha=training_args.burn_focal_loss_alpha,
-                gamma=training_args.burn_focal_loss_gamma,
+            break_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                y[:, :, 1], batch["break"].float(), reduction="none"
             )
             mask_len = batch["mask"].shape[-1]
             prom_loss *= batch["mask"]
@@ -207,10 +193,7 @@ def train_epoch(epoch):
             and global_step % training_args.eval_every_n_steps == 0
             and accelerator.is_main_process
         ):
-            if training_args.do_full_eval:
-                evaluate()
-            else:
-                evaluate_loss_only()
+            evaluate()
             console_rule(f"Epoch {epoch}")
         step += 1
         global_step += 1
@@ -240,19 +223,11 @@ def evaluate():
             else:
                 x = batch["mpm"]
             y = model(x)
-            prom_loss = torchvision.ops.focal_loss.sigmoid_focal_loss(
-                y[:, :, 0],
-                batch["prominence"].float(),
-                reduction="none",
-                alpha=training_args.burn_focal_loss_alpha,
-                gamma=training_args.burn_focal_loss_gamma,
+            prom_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                y[:, :, 0], batch["prominence"].float(), reduction="none"
             )
-            break_loss = torchvision.ops.focal_loss.sigmoid_focal_loss(
-                y[:, :, 1],
-                batch["break"].float(),
-                reduction="none",
-                alpha=training_args.burn_focal_loss_alpha,
-                gamma=training_args.burn_focal_loss_gamma,
+            break_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                y[:, :, 1], batch["break"].float(), reduction="none"
             )
             mask_len = batch["mask"].shape[-1]
             prom_loss *= batch["mask"]
@@ -277,10 +252,36 @@ def evaluate():
             y_pred_break.append(
                 torch.sigmoid(y[:, :, 1])[batch["mask"].bool()].flatten()
             )
+    # y_true_prom = torch.cat(y_true_prom).cpu().numpy()
+    # y_pred_prom = torch.round(torch.cat(y_pred_prom)).cpu().numpy()
+    # y_true_break = torch.cat(y_true_break).cpu().numpy()
+    # y_pred_break = torch.round(torch.cat(y_pred_break)).cpu().numpy()
     y_true_prom = torch.cat(y_true_prom).cpu().numpy()
-    y_pred_prom = torch.round(torch.cat(y_pred_prom)).cpu().numpy()
+    y_pred_prom = torch.cat(y_pred_prom).cpu().numpy()
     y_true_break = torch.cat(y_true_break).cpu().numpy()
-    y_pred_break = torch.round(torch.cat(y_pred_break)).cpu().numpy()
+    y_pred_break = torch.cat(y_pred_break).cpu().numpy()
+    percent_10 = int(len(y_true_prom) * 0.1)
+    y_true_prom_t = y_true_prom[:percent_10]
+    y_pred_prom_t = y_pred_prom[:percent_10]
+    y_true_break_t = y_true_break[:percent_10]
+    y_pred_break_t = y_pred_break[:percent_10]
+    best_prom_threshold = 0
+    best_prom_f1 = 0
+    best_break_threshold = 0
+    best_break_f1 = 0
+    for threshold in np.arange(0, 1, 0.01):
+        prom_f1 = f1_score(y_true_prom_t, y_pred_prom_t > threshold, average="binary")
+        break_f1 = f1_score(y_true_break_t, y_pred_break_t > threshold, average="binary")
+        if prom_f1 > best_prom_f1:
+            best_prom_f1 = prom_f1
+            best_prom_threshold = threshold
+        if break_f1 > best_break_f1:
+            best_break_f1 = break_f1
+            best_break_threshold = threshold
+    y_pred_prom = (y_pred_prom > best_prom_threshold)[percent_10:]
+    y_pred_break = (y_pred_break > best_break_threshold)[percent_10:]
+    y_true_prom = y_true_prom[percent_10:]
+    y_true_break = y_true_break[percent_10:]
     wandb_log(
         "val",
         {
@@ -288,13 +289,17 @@ def evaluate():
             "break_loss": torch.mean(torch.tensor(break_losses)).item(),
             "prom_loss": torch.mean(torch.tensor(prom_losses)).item(),
             "prom_acc": accuracy_score(y_true_prom, y_pred_prom),
-            "prom_f1": f1_score(y_true_prom, y_pred_prom),
+            "prom_f1": f1_score(y_true_prom, y_pred_prom, average="macro"),
+            "prom_f1_binary": f1_score(y_true_prom, y_pred_prom, average="binary"),
             "prom_precision": precision_score(y_true_prom, y_pred_prom),
             "prom_recall": recall_score(y_true_prom, y_pred_prom),
             "break_acc": accuracy_score(y_true_break, y_pred_break),
-            "break_f1": f1_score(y_true_break, y_pred_break),
+            "break_f1": f1_score(y_true_break, y_pred_break, average="macro"),
+            "break_f1_binary": f1_score(y_true_break, y_pred_break, average="binary"),
             "break_precision": precision_score(y_true_break, y_pred_break),
             "break_recall": recall_score(y_true_break, y_pred_break),
+            "best_prom_threshold": best_prom_threshold,
+            "best_break_threshold": best_break_threshold,
         },
     )
 
@@ -381,7 +386,7 @@ def main():
         mask = training_args.mpm_mask_size
         step = training_args.mpm_checkpoint_step
         collator_args.mpm = (
-            f"masked-prosody-modeling/checkpoints/bin{bins}_mask{mask}/step_{step}"
+            f"mpm_checkpoints/bin{bins}_mask{mask}/step_{step}"
         )
 
     validate_args(training_args, model_args, collator_args)
@@ -393,6 +398,7 @@ def main():
     console_print(f"[green]process_index[/green]: {accelerator.process_index}")
 
     # model
+    seed_everything(training_args.seed)
     model = BreakProminenceClassifier(model_args)
     console_rule("Model")
     print_and_draw_model()
@@ -414,7 +420,7 @@ def main():
     console_print(f"[green]train[/green]: {len(train_ds)}")
     console_print(f"[green]val[/green]: {len(val_ds)}")
 
-    collator = get_collator(collator_args)
+    collator = get_collator(collator_args, device=accelerator.device)
 
     # dataloader
     if training_args.num_workers is None:

@@ -1,5 +1,7 @@
+accelerate launch scripts/train_timit.py configs/linear.yml --run_name timit_global_linear_mpm_8 --mpm_bin_size 16 --mpm_mask_size 128 --use_mpm --mpm_layer 7 --num_workers 32
+
 # accelerate launch scrists/train_ravdess.py configs/conformer.yml --run_name ravdess_conformer_raw_algo --use_algorithmic_features
-accelerate launch scripts/train_timit.py configs/conformer.yml --run_name timit_conformer_raw_vocex
+# accelerate launch scripts/train_timit.py configs/conformer.yml --run_name timit_conformer_raw_vocex
 # accelerate launch scripts/train_timit.py configs/conformer.yml --run_name timit_conformer_raw_algo --use_algorithmic_features
 
 
