@@ -21,6 +21,9 @@ if args.type == "intrinsic":
         r
         for r in api.runs("cdminix/masked-prosody-modeling")
         if ("bin" in r.name and "mask" in r.name and r.state == "finished")
+        and "gs" not in r.name
+        and "diff" not in r.name
+        and "var" not in r.name
     ]
 
     bins = []
@@ -32,9 +35,14 @@ if args.type == "intrinsic":
     vad_mae = []
 
     for r in tqdm(runs, desc="Loading runs"):
+        print(r.name)
         bins.append(int(r.name.split("_")[0].replace("bin", "")))
         masks.append(int(r.name.split("_")[1].replace("mask", "")))
-        train_loss.append(r.summary["train/loss"])
+        train_loss_vals = r.history(keys=["train/loss"])["train/loss"].values
+        first_time_within_20_percent = np.where(
+            train_loss_vals < train_loss_vals[-1] * 1.2
+        )[0][0]
+        train_loss.append(first_time_within_20_percent / len(train_loss_vals))
         val_loss.append(r.summary["val/loss"])
         pitch_mae.append(r.summary["val/mae_pitch"])
         energy_mae.append(r.summary["val/mae_energy"])
@@ -66,8 +74,8 @@ if args.type == "intrinsic":
     )
 
     plt.title(value_to_plot)
-    plt.xlabel("Masks")
-    plt.ylabel("Bins")
+    plt.xlabel("Mask Size")
+    plt.ylabel("Codebook Size")
     plt.show()
 elif args.type == "extrinsic":
     dataset = args.dataset
@@ -80,6 +88,8 @@ elif args.type == "extrinsic":
             and r.state == "finished"
             and dataset in r.name
             and "gs" in r.name
+            and "var" not in r.name
+            and "diff" not in r.name
         )
     ]
     bins = []
@@ -89,10 +99,9 @@ elif args.type == "extrinsic":
         bins.append(r.config["training"]["mpm_bin_size"])
         masks.append(r.config["training"]["mpm_mask_size"])
         # measure.append(r.summary[args.measure])
-        measure.append(np.mean(r.history(keys=[args.measure])[args.measure].values))
+        measure.append(np.max(r.history(keys=[args.measure])[args.measure].values))
 
-    # min-max normalize measure
-    measure = (measure - np.min(measure)) / (np.max(measure) - np.min(measure))
+    # measure = (measure - np.mean(measure)) / np.std(measure) * -1
 
     df = pd.DataFrame(
         {
@@ -107,15 +116,12 @@ elif args.type == "extrinsic":
         df.pivot(index="bins", columns="masks", values="measure"),
         annot=True,
         fmt=".3f",
-        cmap="viridis",
+        cmap="RdYlGn",
         cbar=False,
-        vmin=0,
-        vmax=1,
     )
 
-    plt.title(f"{dataset} + {args.measure} + {args.type}")
-    plt.xlabel("Masks")
-    plt.ylabel("Bins")
+    plt.xlabel("Mask Size")
+    plt.ylabel("Codebook Size")
     plt.show()
 elif args.type == "full_f1":
     dfs = []
@@ -135,6 +141,8 @@ elif args.type == "full_f1":
                 and r.state == "finished"
                 and dataset in r.name
                 and "gs" in r.name
+                and "var" not in r.name
+                and "diff" not in r.name
             )
         ]
         bins = []
@@ -144,17 +152,21 @@ elif args.type == "full_f1":
             bins.append(r.config["training"]["mpm_bin_size"])
             masks.append(r.config["training"]["mpm_mask_size"])
             # measure.append(r.summary[args.measure])
-            measure.append(np.mean(r.history(keys=[measure_name])[measure_name].values))
+            measure.append(np.max(r.history(keys=[measure_name])[measure_name].values))
 
-        normalized_measure = (measure - np.min(measure)) / (
-            np.max(measure) - np.min(measure)
-        )
+        normalized_measure = (measure - np.mean(measure)) / np.std(measure)
         df = pd.DataFrame(
             {
                 "bins": bins,
                 "masks": masks,
                 "measure": normalized_measure,
+                "unnormalized_measure": measure,
             }
+        )
+        print(
+            measure_name,
+            df["unnormalized_measure"].mean(),
+            df["unnormalized_measure"].std(),
         )
         dfs.append(df)
     full_df = pd.concat(dfs)
@@ -165,10 +177,10 @@ elif args.type == "full_f1":
         .reset_index()
         .pivot(index="bins", columns="masks", values="measure"),
         annot=True,
-        fmt=".3f",
-        cmap="viridis",
+        fmt=".3f",  # divergent color map (red = bad, green = good) with white at 0
+        cmap="RdYlGn",
         cbar=False,
-        vmin=0,
+        vmin=-1,
         vmax=1,
     )
 
@@ -194,6 +206,8 @@ elif args.type == "full_loss":
                 and r.state == "finished"
                 and dataset in r.name
                 and "gs" in r.name
+                and "var" not in r.name
+                and "diff" not in r.name
             )
         ]
         bins = []
@@ -203,21 +217,24 @@ elif args.type == "full_loss":
             bins.append(r.config["training"]["mpm_bin_size"])
             masks.append(r.config["training"]["mpm_mask_size"])
             # measure.append(r.summary[args.measure])
-            measure.append(
-                np.median(r.history(keys=[measure_name])[measure_name].values)
-            )
+            measure.append(np.min(r.history(keys=[measure_name])[measure_name].values))
 
-        normalized_measure = (measure - np.min(measure)) / (
-            np.max(measure) - np.min(measure)
-        )
+        normalized_measure = (measure - np.mean(measure)) / np.std(measure)
         df = pd.DataFrame(
             {
                 "bins": bins,
                 "masks": masks,
                 "measure": normalized_measure,
+                "unnormalized_measure": measure,
             }
         )
         dfs.append(df)
+
+        print(
+            measure_name,
+            df["unnormalized_measure"].mean(),
+            df["unnormalized_measure"].std(),
+        )
     full_df = pd.concat(dfs)
     # Plot heatmap
     sns.heatmap(
@@ -227,13 +244,99 @@ elif args.type == "full_loss":
         .pivot(index="bins", columns="masks", values="measure"),
         annot=True,
         fmt=".3f",
-        cmap="viridis",
+        cmap="RdYlGn_r",
         cbar=False,
-        vmin=0,
+        vmin=-1,
         vmax=1,
     )
 
-    plt.title(f"Full + {args.type}")
-    plt.xlabel("Masks")
-    plt.ylabel("Bins")
+    plt.xlabel("Mask Size")
+    plt.ylabel("Codebook Size")
+    plt.show()
+elif args.type == "layers":
+    runs = [
+        r
+        for r in api.runs("cdminix/masked-prosody-modeling")
+        if ("_layer" in r.name and args.dataset in r.name)
+    ]
+    layers = []
+    measure = []
+    for r in tqdm(runs, desc="Loading runs"):
+        print(r.name)
+        layers.append(int(r.name.split("_")[-1]))
+        measure.append(r.summary[args.measure])
+
+    df = pd.DataFrame(
+        {
+            "layers": layers,
+            "measure": measure,
+        }
+    )
+
+    # Plot line
+    sns.lineplot(data=df, x="layers", y="measure")
+    plt.show()
+elif args.type == "layers_all":
+    dfs = []
+    task_dict = {
+        "val/prom_f1": "Prominence",
+        "val/break_f1": "Boundary",
+    }
+    for dataset, measure_name in [
+        ("burn", "val/prom_f1"),
+        ("burn", "val/break_f1"),
+    ]:
+        runs = [
+            r
+            for r in api.runs("cdminix/masked-prosody-modeling")
+            if ("_layer" in r.name and dataset in r.name)
+        ]
+        layers = []
+        measure = []
+        for r in tqdm(runs, desc="Loading runs"):
+            layers.append(int(r.name.split("_")[-1]) + 1)
+            measure.append(
+                np.median(r.history(keys=[measure_name])[measure_name].values)
+            )
+
+        df = pd.DataFrame(
+            {
+                "layers": layers,
+                "measure": measure,
+            }
+        )
+        df["Task"] = task_dict[measure_name]
+        dfs.append(df)
+
+    # subplots
+    fig, axes = plt.subplots(1, 2, figsize=(10, 2.5))
+    sns.lineplot(
+        data=dfs[0],
+        x="layers",
+        y="measure",
+        hue="Task",
+        ax=axes[0],
+        marker="o",
+        palette=("#6C8EBF",),
+    )
+    sns.lineplot(
+        data=dfs[1],
+        x="layers",
+        y="measure",
+        hue="Task",
+        ax=axes[1],
+        marker="o",
+        palette=("#D6B656",),
+    )
+    axes[0].set_title("Burn (Prominence)")
+    axes[0].set_xticks(dfs[0]["layers"])
+    axes[0].legend(loc="lower right")
+    axes[0].set_ylabel("F1")
+    axes[0].set_xlabel("Layer")
+    axes[1].set_title("Burn (Boundary)")
+    axes[1].set_xticks(dfs[1]["layers"])
+    axes[1].legend(loc="lower right")
+    axes[1].set_ylabel("F1")
+    axes[1].set_xlabel("Layer")
+    sns.despine()
     plt.show()

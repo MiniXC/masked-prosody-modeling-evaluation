@@ -271,6 +271,8 @@ def evaluate():
     y_pred_phon = torch.round(torch.cat(y_pred_phon)).cpu().numpy()
     y_true_word = torch.cat(y_true_word).cpu().numpy()
     y_pred_word = torch.round(torch.cat(y_pred_word)).cpu().numpy()
+    console_print(f"[green]pct. positive phoneme[/green]: {y_true_phon.mean():.3f}")
+    console_print(f"[green]pct. positive word[/green]: {y_true_word.mean():.3f}")
     wandb_log(
         "val",
         {

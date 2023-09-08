@@ -12,6 +12,7 @@ console = Console()
 
 from configs.args import RAVDESSModelArgs
 from scripts.util.remote import push_to_hub
+from model.modules import ConformerLayer, PositionalEncoding, TransformerEncoder
 
 
 class EmotionClassifier(nn.Module):
@@ -56,22 +57,36 @@ class EmotionClassifier(nn.Module):
             )
         elif args.type == "linear":
             self.final_linear = nn.Linear(input_size * 2, 8)
-        elif args.type == "lstm":
-            self.lstm = nn.LSTM(
-                input_size=input_size,
-                hidden_size=args.hidden_dim,
+        elif args.type == "conformer":
+            self.input_linear = nn.Linear(input_size, args.hidden_dim)
+
+            self.positional_encoding = PositionalEncoding(args.hidden_dim)
+
+            self.conformer = TransformerEncoder(
+                ConformerLayer(
+                    args.hidden_dim,
+                    args.n_heads,
+                    conv_in=args.hidden_dim,
+                    conv_filter_size=args.filter_size,
+                    conv_kernel=(args.kernel_size, 1),
+                    batch_first=True,
+                    dropout=args.dropout,
+                ),
                 num_layers=args.n_layers,
-                bidirectional=True,
-                batch_first=True,
-                dropout=args.dropout,
             )
             # instead doing mean and max pooling, we can use attention
-            self.attention = nn.Sequential(
+            # self.attention = nn.Sequential(
+            #     nn.Linear(args.hidden_dim, args.hidden_dim),
+            #     nn.GELU(),
+            #     nn.Dropout(args.dropout),
+            #     nn.Linear(args.hidden_dim, 1),
+            # )
+            self.final_linear = nn.Sequential(
                 nn.Linear(args.hidden_dim * 2, args.hidden_dim),
-                nn.Tanh(),
-                nn.Linear(args.hidden_dim, 1),
+                nn.GELU(),
+                nn.Dropout(args.dropout),
+                nn.Linear(args.hidden_dim, 8),
             )
-            self.final_linear = nn.Linear(args.hidden_dim * 2, 8)
 
         self.args = args
 
@@ -96,11 +111,26 @@ class EmotionClassifier(nn.Module):
                 dim=-1,
             )
             return self.final_linear(x)
-        elif self.args.type == "lstm":
-            x, _ = self.lstm(x)
-            attention = self.attention(x)
-            attention = torch.softmax(attention, dim=1)
-            x = (x * attention).sum(dim=1)
+        elif self.args.type == "conformer":
+            x = self.input_linear(x)
+            x = self.positional_encoding(x)
+            x = self.conformer(x)
+            # attn_scores = self.attention(x)
+            # attn_scores = torch.softmax(attn_scores, dim=1)
+            # x = torch.cat(
+            #     [
+            #         (x * attn_scores).sum(dim=1),
+            #         (x * attn_scores).max(dim=1).values,
+            #     ],
+            #     dim=-1,
+            # )
+            x = torch.cat(
+                [
+                    x.mean(dim=1),
+                    x.max(dim=1).values,
+                ],
+                dim=-1,
+            )
             return self.final_linear(x)
 
     def save_model(self, path, accelerator=None, onnx=False):

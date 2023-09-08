@@ -6,6 +6,7 @@ hidden_dim: 512
 n_layers: 2
 wandb_project: "masked-prosody-modeling"
 wandb_mode: "online"
+timit_phon_focal_loss_alpha: 0.65
+timit_word_focal_loss_alpha: 0.87
 type: "linear"
-use_mpm: False
 overwrite_data: True

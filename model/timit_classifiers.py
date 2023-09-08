@@ -12,6 +12,7 @@ console = Console()
 
 from configs.args import TIMITModelArgs
 from scripts.util.remote import push_to_hub
+from model.modules import ConformerLayer, PositionalEncoding, TransformerEncoder
 
 
 class PhonemeWordBoundaryClassifier(nn.Module):
@@ -51,16 +52,31 @@ class PhonemeWordBoundaryClassifier(nn.Module):
             self.mlp.add_module("layer_out_linear", nn.Linear(args.hidden_dim, 2))
         elif args.type == "linear":
             self.linear = nn.Linear(input_size, 2)
-        elif args.type == "lstm":
-            self.lstm = nn.LSTM(
-                input_size=input_size,
-                hidden_size=args.hidden_dim,
+        elif args.type == "conformer":
+            self.input_linear = nn.Linear(input_size, args.hidden_dim)
+
+            self.positional_encoding = PositionalEncoding(args.hidden_dim)
+
+            self.conformer = TransformerEncoder(
+                ConformerLayer(
+                    args.hidden_dim,
+                    args.n_heads,
+                    conv_in=args.hidden_dim,
+                    conv_filter_size=args.filter_size,
+                    conv_kernel=(args.kernel_size, 1),
+                    batch_first=True,
+                    dropout=args.dropout,
+                ),
                 num_layers=args.n_layers,
-                bidirectional=True,
-                batch_first=True,
-                dropout=args.dropout,
             )
-            self.linear = nn.Linear(args.hidden_dim * 2, 2)
+
+            self.output_layer = nn.Sequential(
+                nn.Linear(args.hidden_dim, args.hidden_dim),
+                nn.LayerNorm((args.max_length, args.hidden_dim)),
+                nn.GELU(),
+                nn.Dropout(args.dropout),
+                nn.Linear(args.hidden_dim, 2),
+            )
 
         self.args = args
 
@@ -69,9 +85,12 @@ class PhonemeWordBoundaryClassifier(nn.Module):
             return self.mlp(x)
         elif self.args.type == "linear":
             return self.linear(x)
-        elif self.args.type == "lstm":
-            x, _ = self.lstm(x)
-            return self.linear(x)
+        elif self.args.type == "conformer":
+            x = self.input_linear(x)
+            x = self.positional_encoding(x)
+            x = self.conformer(x)
+            x = self.output_layer(x)
+            return x
 
     def save_model(self, path, accelerator=None, onnx=False):
         path = Path(path)
@@ -107,9 +126,9 @@ class PhonemeWordBoundaryClassifier(nn.Module):
     def dummy_input(self):
         torch.manual_seed(0)
         if not self.args.use_mpm:
-            return torch.randn(1, 256, len(self.measures) * 2)
+            return torch.randn(1, 384, len(self.measures) * 2)
         else:
-            return torch.randn(1, 256, 512)
+            return torch.randn(1, 384, 512)
 
     def export_onnx(self, path):
         path = Path(path)

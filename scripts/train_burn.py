@@ -8,6 +8,7 @@ sys.path.append(".")  # add root of project to path
 # torch & hf
 import torch
 from torch.utils.data import DataLoader
+import torchvision
 from accelerate import Accelerator
 from transformers import get_linear_schedule_with_warmup, HfArgumentParser
 from datasets import load_dataset
@@ -131,11 +132,25 @@ def train_epoch(epoch):
             else:
                 x = batch["mpm"]
             y = model(x)
-            prom_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-                y[:, :, 0], batch["prominence"].float(), reduction="none"
+            # prom_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+            #     y[:, :, 0], batch["prominence"].float(), reduction="none"
+            # )
+            # break_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+            #     y[:, :, 1], batch["break"].float(), reduction="none"
+            # )
+            prom_loss = torchvision.ops.focal_loss.sigmoid_focal_loss(
+                y[:, :, 0],
+                batch["prominence"].float(),
+                reduction="none",
+                alpha=training_args.burn_focal_loss_alpha,
+                gamma=training_args.burn_focal_loss_gamma,
             )
-            break_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-                y[:, :, 1], batch["break"].float(), reduction="none"
+            break_loss = torchvision.ops.focal_loss.sigmoid_focal_loss(
+                y[:, :, 1],
+                batch["break"].float(),
+                reduction="none",
+                alpha=training_args.burn_focal_loss_alpha,
+                gamma=training_args.burn_focal_loss_gamma,
             )
             mask_len = batch["mask"].shape[-1]
             prom_loss *= batch["mask"]
@@ -152,7 +167,6 @@ def train_epoch(epoch):
                 / break_loss.shape[-1]
                 / break_loss.shape[0]
             )
-            print(prom_loss, break_loss)
             loss = (break_loss + prom_loss) / 2
             accelerator.backward(loss)
             accelerator.clip_grad_norm_(
@@ -226,11 +240,19 @@ def evaluate():
             else:
                 x = batch["mpm"]
             y = model(x)
-            prom_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-                y[:, :, 0], batch["prominence"].float(), reduction="none"
+            prom_loss = torchvision.ops.focal_loss.sigmoid_focal_loss(
+                y[:, :, 0],
+                batch["prominence"].float(),
+                reduction="none",
+                alpha=training_args.burn_focal_loss_alpha,
+                gamma=training_args.burn_focal_loss_gamma,
             )
-            break_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-                y[:, :, 1], batch["break"].float(), reduction="none"
+            break_loss = torchvision.ops.focal_loss.sigmoid_focal_loss(
+                y[:, :, 1],
+                batch["break"].float(),
+                reduction="none",
+                alpha=training_args.burn_focal_loss_alpha,
+                gamma=training_args.burn_focal_loss_gamma,
             )
             mask_len = batch["mask"].shape[-1]
             prom_loss *= batch["mask"]
@@ -273,53 +295,6 @@ def evaluate():
             "break_f1": f1_score(y_true_break, y_pred_break),
             "break_precision": precision_score(y_true_break, y_pred_break),
             "break_recall": recall_score(y_true_break, y_pred_break),
-        },
-    )
-
-
-def evaluate_loss_only():
-    model.eval()
-    losses = []
-    prom_losses = []
-    break_losses = []
-    console_rule("Evaluation")
-    with torch.no_grad():
-        for batch in val_dl:
-            if not model_args.use_mpm:
-                x = torch.cat(
-                    [batch["measures"][m] for m in model_args.measures.split(",")],
-                    dim=-1,
-                )
-            else:
-                x = batch["mpm"]
-            y = model(x)
-            prom_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-                y[:, :, 0], batch["prominence"].float(), reduction="none"
-            )
-            break_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-                y[:, :, 1], batch["break"].float(), reduction="none"
-            )
-            mask_len = batch["mask"].shape[-1]
-            prom_loss *= batch["mask"]
-            break_loss *= batch["mask"]
-            prom_loss = (
-                prom_loss.sum() / (batch["mask"].sum() / mask_len) / prom_loss.shape[-1]
-            )
-            break_loss = (
-                break_loss.sum()
-                / (batch["mask"].sum() / mask_len)
-                / break_loss.shape[-1]
-            )
-            loss = (break_loss + prom_loss) / 2
-            losses.append(loss.detach())
-            break_losses.append(break_loss.detach())
-            prom_losses.append(prom_loss.detach())
-    wandb_log(
-        "val",
-        {
-            "loss": torch.mean(torch.tensor(losses)).item(),
-            "break_loss": torch.mean(torch.tensor(break_losses)).item(),
-            "prom_loss": torch.mean(torch.tensor(prom_losses)).item(),
         },
     )
 
@@ -502,7 +477,6 @@ def main():
             collate_fn=collator,
             drop_last=training_args.drop_last,
         )
-
         val_dl = DataLoader(
             val_ds,
             batch_size=training_args.batch_size,

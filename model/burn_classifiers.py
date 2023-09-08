@@ -11,7 +11,7 @@ from rich.console import Console
 console = Console()
 
 from configs.args import BURNModelArgs
-from scripts.util.remote import push_to_hub
+from model.modules import ConformerLayer, PositionalEncoding, TransformerEncoder
 
 
 class BreakProminenceClassifier(nn.Module):
@@ -51,15 +51,31 @@ class BreakProminenceClassifier(nn.Module):
             self.mlp.add_module("layer_out_linear", nn.Linear(args.hidden_dim, 2))
         elif args.type == "linear":
             self.linear = nn.Linear(input_size, 2)
-        elif args.type == "lstm":
-            self.lstm = nn.LSTM(
-                input_size=input_size,
-                hidden_size=args.hidden_dim,
+        elif args.type == "conformer":
+            self.input_linear = nn.Linear(input_size, args.hidden_dim)
+
+            self.positional_encoding = PositionalEncoding(args.hidden_dim)
+
+            self.conformer = TransformerEncoder(
+                ConformerLayer(
+                    args.hidden_dim,
+                    args.n_heads,
+                    conv_in=args.hidden_dim,
+                    conv_filter_size=args.hidden_dim,
+                    conv_kernel=(args.kernel_size, 1),
+                    batch_first=True,
+                    dropout=args.dropout,
+                ),
                 num_layers=args.n_layers,
-                bidirectional=True,
-                batch_first=True,
             )
-            self.linear = nn.Linear(args.hidden_dim * 2, 2)
+
+            self.output_layer = nn.Sequential(
+                nn.Linear(args.hidden_dim, args.hidden_dim),
+                nn.LayerNorm((args.max_length, args.hidden_dim)),
+                nn.GELU(),
+                nn.Dropout(args.dropout),
+                nn.Linear(args.hidden_dim, 2),
+            )
 
         self._init_weights(self)
 
@@ -73,22 +89,17 @@ class BreakProminenceClassifier(nn.Module):
         elif isinstance(module, nn.LayerNorm):
             nn.init.ones_(module.weight)
             nn.init.zeros_(module.bias)
-        elif isinstance(module, nn.LSTM):
-            for name, param in module.named_parameters():
-                if "weight" in name:
-                    nn.init.xavier_uniform_(param)
-                elif "bias" in name:
-                    nn.init.zeros_(param)
 
     def forward(self, x):
         if self.args.type == "mlp":
             return self.mlp(x)
         elif self.args.type == "linear":
             return self.linear(x)
-        elif self.args.type == "lstm":
-            x, _ = self.lstm(x)
-            x = self.linear(x)
-            return x
+        elif self.args.type == "conformer":
+            x = self.input_linear(x)
+            x = self.positional_encoding(x)
+            x = self.conformer(x)
+            return self.output_layer(x)
 
     def save_model(self, path, accelerator=None, onnx=False):
         path = Path(path)

@@ -7,8 +7,10 @@ class TrainingArgs:
     lr_schedule: str = "linear_with_warmup"
     lr_warmup_steps: int = 1000
     gradient_clip_val: float = 1.0
-    timit_phon_focal_loss_alpha: float = 0.65
-    timit_word_focal_loss_alpha: float = 0.87
+    timit_phon_focal_loss_alpha: float = 0.5
+    timit_word_focal_loss_alpha: float = 0.5
+    burn_focal_loss_alpha: float = 0.5
+    burn_focal_loss_gamma: float = 2.0
     checkpoint_path: str = "checkpoints"
     output_path: str = "outputs"
     run_name: str = None
@@ -59,6 +61,7 @@ class BURNCollatorArgs:
     energy_max: float = 1
     vad_min: float = 0
     vad_max: float = 1
+    use_algorithmic_features: bool = False
 
 
 @dataclass
@@ -75,6 +78,7 @@ class RAVDESSCollatorArgs:
     energy_max: float = 1
     vad_min: float = 0
     vad_max: float = 1
+    use_algorithmic_features: bool = False
 
 
 @dataclass
@@ -91,6 +95,7 @@ class TIMITCollatorArgs:
     energy_max: float = 1
     vad_min: float = 0
     vad_max: float = 1
+    use_algorithmic_features: bool = False
 
 
 @dataclass
@@ -99,8 +104,11 @@ class BURNModelArgs:
     hidden_dim: int = 512
     measures: str = "pitch,energy,voice_activity_binary"
     values_per_word: int = 10
-    type: str = "mlp"  # can be "mlp" or "transformer"
+    type: str = "mlp"  # can be "mlp" or "conformer"
     dropout: float = 0.1
+    n_heads: int = 2
+    kernel_size: int = 7
+    max_length: int = 256
 
 
 @dataclass
@@ -110,6 +118,10 @@ class RAVDESSModelArgs:
     measures: str = "pitch,energy,voice_activity_binary"
     type: str = "mlp"  # can be "mlp" or "transformer"
     dropout: float = 0.1
+    n_heads: int = 2
+    kernel_size: int = 7
+    max_length: int = 512
+    filter_size: int = 256
 
 
 @dataclass
@@ -119,6 +131,10 @@ class TIMITModelArgs:
     measures: str = "pitch,energy,voice_activity_binary"
     type: str = "mlp"  # can be "mlp" or "transformer"
     dropout: float = 0.1
+    n_heads: int = 2
+    kernel_size: int = 7
+    max_length: int = 384
+    filter_size: int = 256
 
 
 @dataclass

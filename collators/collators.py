@@ -7,6 +7,11 @@ import numpy as np
 import librosa
 from vocex import Vocex
 from model.mpm.masked_prosody_model import MaskedProsodyModel
+from speech_collator.measures import (
+    PitchMeasure,
+    EnergyMeasure,
+    VoiceActivityMeasure,
+)
 
 from configs.args import BURNCollatorArgs, RAVDESSCollatorArgs, TIMITCollatorArgs
 
@@ -39,6 +44,10 @@ class BaselineBURNCollator:
 
         self.args = args
         self.vocex = Vocex.from_pretrained(self.args.vocex, fp16=self.args.vocex_fp16)
+        if args.use_algorithmic_features:
+            self.pitch_measure = PitchMeasure()
+            self.energy_measure = EnergyMeasure()
+            self.voice_activity_measure = VoiceActivityMeasure()
 
     def __call__(self, batch):
         results = {measure: [] for measure in self.args.measures.split(",")}
@@ -59,7 +68,23 @@ class BaselineBURNCollator:
                 for i in range(0, len(audio), 96000):
                     windows.append(audio[i : i + 96000])
                 for i, w in enumerate(windows):
-                    vocex_output = self.vocex(w, sr)
+                    if self.args.use_algorithmic_features:
+                        # resample w to 22050
+                        w = librosa.resample(w, orig_sr=sr, target_sr=22050)
+                        pitch = self.pitch_measure(w, np.array([1000]))["measure"]
+                        energy = self.energy_measure(w, np.array([1000]))["measure"]
+                        vad = self.voice_activity_measure(w, np.array([1000]))[
+                            "measure"
+                        ]
+                        vocex_output = {
+                            "measures": {
+                                "pitch": torch.tensor(pitch),
+                                "energy": torch.tensor(energy),
+                                "voice_activity_binary": torch.tensor(vad),
+                            }
+                        }
+                    else:
+                        vocex_output = self.vocex(w, sr)
                     for measure in ALL_MEASURES:
                         measures[measure].append(vocex_output["measures"][measure])
                 for m, v in measures.items():
@@ -355,6 +380,10 @@ class BaselineRAVDESSCollator:
             "disgust": 6,
             "surprised": 7,
         }
+        if args.use_algorithmic_features:
+            self.pitch_measure = PitchMeasure()
+            self.energy_measure = EnergyMeasure()
+            self.voice_activity_measure = VoiceActivityMeasure()
 
     def __call__(self, batch):
         results = {measure: [] for measure in self.args.measures.split(",")}
@@ -369,7 +398,23 @@ class BaselineRAVDESSCollator:
                     measures[measure] = np.load(file)
             if (not file.exists()) or self.args.overwrite:
                 audio, sr = audio["array"], audio["sampling_rate"]
-                vocex_output = self.vocex(audio, sr)
+                if self.args.use_algorithmic_features:
+                    # resample w to 22050
+                    audio = librosa.resample(audio, orig_sr=sr, target_sr=22050)
+                    pitch = self.pitch_measure(audio, np.array([1000]))["measure"]
+                    energy = self.energy_measure(audio, np.array([1000]))["measure"]
+                    vad = self.voice_activity_measure(audio, np.array([1000]))[
+                        "measure"
+                    ]
+                    vocex_output = {
+                        "measures": {
+                            "pitch": torch.tensor(pitch),
+                            "energy": torch.tensor(energy),
+                            "voice_activity_binary": torch.tensor(vad),
+                        }
+                    }
+                else:
+                    vocex_output = self.vocex(audio, sr)
                 for measure in ALL_MEASURES:
                     v = vocex_output["measures"][measure]
                     v = v.flatten()
@@ -573,6 +618,10 @@ class BaselineTIMITCollator:
 
         self.args = args
         self.vocex = Vocex.from_pretrained(self.args.vocex, fp16=self.args.vocex_fp16)
+        if args.use_algorithmic_features:
+            self.pitch_measure = PitchMeasure()
+            self.energy_measure = EnergyMeasure()
+            self.voice_activity_measure = VoiceActivityMeasure()
 
     def __call__(self, batch):
         batch = {k: [d[k] for d in batch] for k in batch[0]}
@@ -590,7 +639,23 @@ class BaselineTIMITCollator:
                     vocex_len = len(measures[measure])
             if (not file.exists()) or self.args.overwrite:
                 audio, sr = audio["array"], audio["sampling_rate"]
-                vocex_output = self.vocex(audio, sr)
+                if self.args.use_algorithmic_features:
+                    # resample w to 22050
+                    audio = librosa.resample(audio, orig_sr=sr, target_sr=22050)
+                    pitch = self.pitch_measure(audio, np.array([1000]))["measure"]
+                    energy = self.energy_measure(audio, np.array([1000]))["measure"]
+                    vad = self.voice_activity_measure(audio, np.array([1000]))[
+                        "measure"
+                    ]
+                    vocex_output = {
+                        "measures": {
+                            "pitch": torch.tensor(pitch),
+                            "energy": torch.tensor(energy),
+                            "voice_activity_binary": torch.tensor(vad),
+                        }
+                    }
+                else:
+                    vocex_output = self.vocex(audio, sr)
                 for measure in ALL_MEASURES:
                     v = vocex_output["measures"][measure]
                     v = v.flatten()
