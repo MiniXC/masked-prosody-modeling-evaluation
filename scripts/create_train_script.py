@@ -36,6 +36,7 @@ with open("scripts/train.sh", "w") as f:
     f.write("\tcp -r data/bu_radio_0 data/bu_radio_3\n")
     f.write("\tgcloud storage cp gs://masked-prosody-model/checkpoints .\n")
     f.write("\tmv checkpoints mpm_checkpoints\n")
+    f.write("fi\n")
     for machine, combs in machines.items():
         # use --machine to specify the machine
         f.write('if [ "$1" == "--machine" ] && [ "$2" == "{}" ]; then\n'.format(machine))

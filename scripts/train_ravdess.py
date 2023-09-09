@@ -385,10 +385,8 @@ def main():
                 if is_first_batch:
                     if collator_args.name == "default_ravdess":
                         fig = plot_baseline_batch(batch, collator_args)
-                        plt.savefig("figures/first_batch_ravdess.png")
                     elif collator_args.name == "prosody_model_ravdess":
                         fig = plot_prosody_model_batch(batch, collator_args)
-                        plt.savefig("figures/first_batch_ravdess.png")
                     wandb.log({"first_batch": wandb.Image(fig)})
                     is_first_batch = False
     collator.args.overwrite = False

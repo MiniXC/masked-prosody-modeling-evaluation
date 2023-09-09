@@ -15,6 +15,7 @@ if [ "$1" == "--setup" ]; then
 	cp -r data/bu_radio_0 data/bu_radio_3
 	gcloud storage cp gs://masked-prosody-model/checkpoints .
 	mv checkpoints mpm_checkpoints
+fi
 if [ "$1" == "--machine" ] && [ "$2" == "starariel-0" ]; then
 	CUDA_VISIBLE_DEVICES=0 BURN_PATH="/disk/scratch/s1764494/data/bu_radio_0" HF_DATASETS_CACHE="/disk/scratch/s1764494/data/hf_0" python scripts/train_burn.py configs/mpm_linear.yml --run_name burn_bin4_mask1_linear_1 --mpm_bin_size 4 --mpm_mask_size 1 --use_mpm --mpm_layer 7 --overwrite_data
 	CUDA_VISIBLE_DEVICES=0 BURN_PATH="/disk/scratch/s1764494/data/bu_radio_0" HF_DATASETS_CACHE="/disk/scratch/s1764494/data/hf_0" python scripts/train_burn.py configs/mpm_linear.yml --run_name burn_bin4_mask1_linear_2 --mpm_bin_size 4 --mpm_mask_size 1 --use_mpm --mpm_layer 7
