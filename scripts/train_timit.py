@@ -476,7 +476,7 @@ def main():
     console_print(f"[green]train[/green]: {len(train_ds)}")
     console_print(f"[green]val[/green]: {len(val_ds)}")
 
-    collator = get_collator(collator_args)
+    collator = get_collator(collator_args, device=accelerator.device)
 
     # dataloader
     if training_args.num_workers is None:
