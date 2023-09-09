@@ -522,6 +522,7 @@ class ProsodyModelRAVDESSCollator:
         self.mpm = MaskedProsodyModel.from_pretrained(self.args.mpm)
         if device is not None:
             self.mpm.to(device)
+        self.device = device
         self.bins = torch.linspace(0, 1, self.mpm.args.bins)
         if args.use_algorithmic_features:
             self.pitch_measure = PitchMeasure()
@@ -569,6 +570,8 @@ class ProsodyModelRAVDESSCollator:
                         vad,
                     ]
                 ).transpose(0, 1)
+                if self.device is not None:
+                    mpm_input = mpm_input.to(self.device)
                 prev_len = mpm_input.shape[-1]
                 if mpm_input.shape[-1] < self.mpm.args.max_length:
                     mpm_input = torch.cat(
@@ -811,6 +814,7 @@ class ProsodyModelTIMITCollator:
         self.bins = torch.linspace(0, 1, self.mpm.args.bins)
         if device is not None:
             self.mpm.to(device)
+        self.device = device
         if args.use_algorithmic_features:
             self.pitch_measure = PitchMeasure()
             self.energy_measure = EnergyMeasure()
@@ -860,6 +864,8 @@ class ProsodyModelTIMITCollator:
                         vad,
                     ]
                 ).transpose(0, 1)
+                if self.device is not None:
+                    mpm_input = mpm_input.to(self.device)
                 prev_len = mpm_input.shape[-1]
                 if mpm_input.shape[-1] < self.mpm.args.max_length:
                     mpm_input = torch.cat(
@@ -871,7 +877,7 @@ class ProsodyModelTIMITCollator:
                                     mpm_input.shape[1],
                                     self.mpm.args.max_length - prev_len,
                                 )
-                            ),
+                            ).to(mpm_input.device),
                         ],
                         dim=-1,
                     )
