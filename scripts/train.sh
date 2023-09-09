@@ -13,7 +13,8 @@ if [ "$1" == "--setup" ]; then
 	cp -r data/bu_radio_0 data/bu_radio_1
 	cp -r data/bu_radio_0 data/bu_radio_2
 	cp -r data/bu_radio_0 data/bu_radio_3
-	gcloud storage cp gs://masked-prosody-model/checkpoints .
+	cd /disk/scratch/s1764494/masked-prosody-modeling-evaluation
+	gcloud storage cp -R gs://masked-prosody-model/checkpoints .
 	mv checkpoints mpm_checkpoints
 fi
 if [ "$1" == "--machine" ] && [ "$2" == "starariel-0" ]; then

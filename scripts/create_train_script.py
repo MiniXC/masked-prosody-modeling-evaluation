@@ -34,7 +34,8 @@ with open("scripts/train.sh", "w") as f:
     f.write("\tcp -r data/bu_radio_0 data/bu_radio_1\n")
     f.write("\tcp -r data/bu_radio_0 data/bu_radio_2\n")
     f.write("\tcp -r data/bu_radio_0 data/bu_radio_3\n")
-    f.write("\tgcloud storage cp gs://masked-prosody-model/checkpoints .\n")
+    f.write("\tcd /disk/scratch/s1764494/masked-prosody-modeling-evaluation\n")
+    f.write("\tgcloud storage cp -R gs://masked-prosody-model/checkpoints .\n")
     f.write("\tmv checkpoints mpm_checkpoints\n")
     f.write("fi\n")
     for machine, combs in machines.items():
