@@ -4,7 +4,7 @@ lr_warmup_steps: 100
 n_steps: 1000
 hidden_dim: 512
 n_layers: 2
-wandb_project: "masked-prosody-modeling-eval"
+wandb_project: "masked-prosody-modeling-v2-eval"
 wandb_mode: "online"
 type: "linear"
 use_mpm: True

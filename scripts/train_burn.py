@@ -398,7 +398,6 @@ def main():
     console_print(f"[green]process_index[/green]: {accelerator.process_index}")
 
     # model
-    seed_everything(training_args.seed)
     model = BreakProminenceClassifier(model_args)
     console_rule("Model")
     print_and_draw_model()
