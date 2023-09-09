@@ -457,7 +457,7 @@ if [ "$1" == "--machine" ] && [ "$2" == "starariel-3" ]; then
 	CUDA_VISIBLE_DEVICES=3 HF_DATASETS_CACHE="/disk/scratch/s1764494/data/hf_3" python scripts/train_ravdess.py configs/mpm_linear.yml --run_name ravdess_bin1024_mask16_linear_3 --mpm_bin_size 1024 --mpm_mask_size 16 --use_mpm --mpm_layer 7
 	CUDA_VISIBLE_DEVICES=3 HF_DATASETS_CACHE="/disk/scratch/s1764494/data/hf_3" python scripts/train_ravdess.py configs/mpm_conformer.yml --run_name ravdess_bin1024_mask16_conformer --mpm_bin_size 1024 --mpm_mask_size 16 --use_mpm --mpm_layer 7
 fi
-if [ "$1" == "--machine" ] && [ "$2" == "hessdalen-0" ]; then
+if [ "$1" == "--machine" ] && [ "$2" == "stardale-0" ]; then
 	CUDA_VISIBLE_DEVICES=0 BURN_PATH="/disk/scratch/s1764494/data/bu_radio_0" HF_DATASETS_CACHE="/disk/scratch/s1764494/data/hf_0" python scripts/train_burn.py configs/mpm_linear.yml --run_name burn_bin4_mask16_linear_1 --mpm_bin_size 4 --mpm_mask_size 16 --use_mpm --mpm_layer 7 --overwrite_data
 	CUDA_VISIBLE_DEVICES=0 BURN_PATH="/disk/scratch/s1764494/data/bu_radio_0" HF_DATASETS_CACHE="/disk/scratch/s1764494/data/hf_0" python scripts/train_burn.py configs/mpm_linear.yml --run_name burn_bin4_mask16_linear_2 --mpm_bin_size 4 --mpm_mask_size 16 --use_mpm --mpm_layer 7
 	CUDA_VISIBLE_DEVICES=0 BURN_PATH="/disk/scratch/s1764494/data/bu_radio_0" HF_DATASETS_CACHE="/disk/scratch/s1764494/data/hf_0" python scripts/train_burn.py configs/mpm_linear.yml --run_name burn_bin4_mask16_linear_3 --mpm_bin_size 4 --mpm_mask_size 16 --use_mpm --mpm_layer 7
@@ -567,7 +567,7 @@ if [ "$1" == "--machine" ] && [ "$2" == "hessdalen-0" ]; then
 	CUDA_VISIBLE_DEVICES=0 HF_DATASETS_CACHE="/disk/scratch/s1764494/data/hf_0" python scripts/train_ravdess.py configs/mpm_linear.yml --run_name ravdess_bin1024_mask32_linear_3 --mpm_bin_size 1024 --mpm_mask_size 32 --use_mpm --mpm_layer 7
 	CUDA_VISIBLE_DEVICES=0 HF_DATASETS_CACHE="/disk/scratch/s1764494/data/hf_0" python scripts/train_ravdess.py configs/mpm_conformer.yml --run_name ravdess_bin1024_mask32_conformer --mpm_bin_size 1024 --mpm_mask_size 32 --use_mpm --mpm_layer 7
 fi
-if [ "$1" == "--machine" ] && [ "$2" == "hessdalen-1" ]; then
+if [ "$1" == "--machine" ] && [ "$2" == "stardale-1" ]; then
 	CUDA_VISIBLE_DEVICES=1 BURN_PATH="/disk/scratch/s1764494/data/bu_radio_1" HF_DATASETS_CACHE="/disk/scratch/s1764494/data/hf_1" python scripts/train_burn.py configs/mpm_linear.yml --run_name burn_bin4_mask32_linear_1 --mpm_bin_size 4 --mpm_mask_size 32 --use_mpm --mpm_layer 7 --overwrite_data
 	CUDA_VISIBLE_DEVICES=1 BURN_PATH="/disk/scratch/s1764494/data/bu_radio_1" HF_DATASETS_CACHE="/disk/scratch/s1764494/data/hf_1" python scripts/train_burn.py configs/mpm_linear.yml --run_name burn_bin4_mask32_linear_2 --mpm_bin_size 4 --mpm_mask_size 32 --use_mpm --mpm_layer 7
 	CUDA_VISIBLE_DEVICES=1 BURN_PATH="/disk/scratch/s1764494/data/bu_radio_1" HF_DATASETS_CACHE="/disk/scratch/s1764494/data/hf_1" python scripts/train_burn.py configs/mpm_linear.yml --run_name burn_bin4_mask32_linear_3 --mpm_bin_size 4 --mpm_mask_size 32 --use_mpm --mpm_layer 7
@@ -677,7 +677,7 @@ if [ "$1" == "--machine" ] && [ "$2" == "hessdalen-1" ]; then
 	CUDA_VISIBLE_DEVICES=1 HF_DATASETS_CACHE="/disk/scratch/s1764494/data/hf_1" python scripts/train_ravdess.py configs/mpm_linear.yml --run_name ravdess_bin1024_mask64_linear_3 --mpm_bin_size 1024 --mpm_mask_size 64 --use_mpm --mpm_layer 7
 	CUDA_VISIBLE_DEVICES=1 HF_DATASETS_CACHE="/disk/scratch/s1764494/data/hf_1" python scripts/train_ravdess.py configs/mpm_conformer.yml --run_name ravdess_bin1024_mask64_conformer --mpm_bin_size 1024 --mpm_mask_size 64 --use_mpm --mpm_layer 7
 fi
-if [ "$1" == "--machine" ] && [ "$2" == "hessdalen-2" ]; then
+if [ "$1" == "--machine" ] && [ "$2" == "stardale-2" ]; then
 	CUDA_VISIBLE_DEVICES=2 BURN_PATH="/disk/scratch/s1764494/data/bu_radio_2" HF_DATASETS_CACHE="/disk/scratch/s1764494/data/hf_2" python scripts/train_burn.py configs/mpm_linear.yml --run_name burn_bin4_mask64_linear_1 --mpm_bin_size 4 --mpm_mask_size 64 --use_mpm --mpm_layer 7 --overwrite_data
 	CUDA_VISIBLE_DEVICES=2 BURN_PATH="/disk/scratch/s1764494/data/bu_radio_2" HF_DATASETS_CACHE="/disk/scratch/s1764494/data/hf_2" python scripts/train_burn.py configs/mpm_linear.yml --run_name burn_bin4_mask64_linear_2 --mpm_bin_size 4 --mpm_mask_size 64 --use_mpm --mpm_layer 7
 	CUDA_VISIBLE_DEVICES=2 BURN_PATH="/disk/scratch/s1764494/data/bu_radio_2" HF_DATASETS_CACHE="/disk/scratch/s1764494/data/hf_2" python scripts/train_burn.py configs/mpm_linear.yml --run_name burn_bin4_mask64_linear_3 --mpm_bin_size 4 --mpm_mask_size 64 --use_mpm --mpm_layer 7
@@ -787,7 +787,7 @@ if [ "$1" == "--machine" ] && [ "$2" == "hessdalen-2" ]; then
 	CUDA_VISIBLE_DEVICES=2 HF_DATASETS_CACHE="/disk/scratch/s1764494/data/hf_2" python scripts/train_ravdess.py configs/mpm_linear.yml --run_name ravdess_bin1024_mask128_linear_3 --mpm_bin_size 1024 --mpm_mask_size 128 --use_mpm --mpm_layer 7
 	CUDA_VISIBLE_DEVICES=2 HF_DATASETS_CACHE="/disk/scratch/s1764494/data/hf_2" python scripts/train_ravdess.py configs/mpm_conformer.yml --run_name ravdess_bin1024_mask128_conformer --mpm_bin_size 1024 --mpm_mask_size 128 --use_mpm --mpm_layer 7
 fi
-if [ "$1" == "--machine" ] && [ "$2" == "hessdalen-3" ]; then
+if [ "$1" == "--machine" ] && [ "$2" == "stardale-3" ]; then
 	CUDA_VISIBLE_DEVICES=3 BURN_PATH="/disk/scratch/s1764494/data/bu_radio_3" HF_DATASETS_CACHE="/disk/scratch/s1764494/data/hf_3" python scripts/train_burn.py configs/mpm_linear.yml --run_name burn_bin4_mask128_linear_1 --mpm_bin_size 4 --mpm_mask_size 128 --use_mpm --mpm_layer 7 --overwrite_data
 	CUDA_VISIBLE_DEVICES=3 BURN_PATH="/disk/scratch/s1764494/data/bu_radio_3" HF_DATASETS_CACHE="/disk/scratch/s1764494/data/hf_3" python scripts/train_burn.py configs/mpm_linear.yml --run_name burn_bin4_mask128_linear_2 --mpm_bin_size 4 --mpm_mask_size 128 --use_mpm --mpm_layer 7
 	CUDA_VISIBLE_DEVICES=3 BURN_PATH="/disk/scratch/s1764494/data/bu_radio_3" HF_DATASETS_CACHE="/disk/scratch/s1764494/data/hf_3" python scripts/train_burn.py configs/mpm_linear.yml --run_name burn_bin4_mask128_linear_3 --mpm_bin_size 4 --mpm_mask_size 128 --use_mpm --mpm_layer 7

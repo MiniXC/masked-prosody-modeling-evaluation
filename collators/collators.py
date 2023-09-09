@@ -590,7 +590,7 @@ class ProsodyModelRAVDESSCollator:
                 mpm_output = self.mpm(
                     mpm_input.long(), return_layer=self.args.mpm_layer
                 )
-                out = mpm_output["representations"]
+                out = mpm_output["representations"].detach().cpu()
                 out = out[0, :prev_len, :]
                 np.save(
                     Path(audio_path).with_suffix(f".mpm.npy"),
@@ -886,7 +886,7 @@ class ProsodyModelTIMITCollator:
                 mpm_output = self.mpm(
                     mpm_input.long(), return_layer=self.args.mpm_layer
                 )
-                out = mpm_output["representations"]
+                out = mpm_output["representations"].detach().cpu()
                 if prev_len < self.mpm.args.max_length:
                     out = out[0, :prev_len, :]
                 else:

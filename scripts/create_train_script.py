@@ -8,10 +8,10 @@ machines = {
     "starariel-1": [],
     "starariel-2": [],
     "starariel-3": [],
-    "hessdalen-0": [],
-    "hessdalen-1": [],
-    "hessdalen-2": [],
-    "hessdalen-3": [],
+    "stardale-0": [],
+    "stardale-1": [],
+    "stardale-2": [],
+    "stardale-3": [],
 }
 # divide the combinations into 8 groups
 
