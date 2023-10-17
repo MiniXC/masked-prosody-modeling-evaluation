@@ -1,3 +1,7 @@
+# for runs on just one GPU/CPU use the following
+python scrists/train_ravdess.py configs/conformer.yml --run_name ravdess_conformer_raw_algo --use_algorithmic_features --use_cwt
+
+# only use for multiple GPUs/TPUs
 accelerate launch scrists/train_ravdess.py configs/conformer.yml --run_name ravdess_conformer_raw_algo --use_algorithmic_features --use_cwt
 accelerate launch scripts/train_timit.py configs/conformer.yml --run_name timit_conformer_raw_algo --use_algorithmic_features --use_cwt
 accelerate launch scripts/train_burn.py configs/conformer.yml --run_name burn_conformer_raw_algo --use_algorithmic_features --use_cwt
