@@ -24,6 +24,8 @@ class BreakProminenceClassifier(nn.Module):
         if not args.use_mpm:
             self.measures = args.measures.split(",")
             input_size = len(self.measures) * args.values_per_word
+            if args.use_cwt:
+                input_size = input_size * 30
         else:
             input_size = 512
 
@@ -135,7 +137,16 @@ class BreakProminenceClassifier(nn.Module):
     def dummy_input(self):
         torch.manual_seed(0)
         if not self.args.use_mpm:
-            return torch.randn(1, 256, self.args.values_per_word * len(self.measures))
+            if not self.args.use_cwt:
+                return torch.randn(
+                    1, 256, self.args.values_per_word * len(self.measures)
+                )
+            else:
+                return torch.randn(
+                    1,
+                    256,
+                    self.args.values_per_word * len(self.measures) * 30,
+                )
         else:
             return torch.randn(1, 256, 512)
 

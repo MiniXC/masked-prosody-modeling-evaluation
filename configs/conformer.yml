@@ -9,5 +9,4 @@ n_layers: 2
 wandb_project: "masked-prosody-modeling"
 wandb_mode: "offline"
 type: "conformer"
-overwrite_data: False
 dropout: 0.2

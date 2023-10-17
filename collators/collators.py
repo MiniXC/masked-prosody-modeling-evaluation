@@ -12,6 +12,7 @@ from speech_collator.measures import (
     EnergyMeasure,
     VoiceActivityMeasure,
 )
+from scipy.signal import cwt, ricker
 
 from configs.args import BURNCollatorArgs, RAVDESSCollatorArgs, TIMITCollatorArgs
 
@@ -76,6 +77,13 @@ class BaselineBURNCollator:
                         vad = self.voice_activity_measure(w, np.array([1000]))[
                             "measure"
                         ]
+                        if self.args.use_cwt:
+                            pitch = (pitch - pitch.mean()) / (pitch.std() + 1e-8)
+                            energy = (energy - energy.mean()) / (energy.std() + 1e-8)
+                            vad = (vad - vad.mean()) / (vad.std() + 1e-8)
+                            pitch = cwt(pitch, ricker, np.arange(1, 31)).T
+                            energy = cwt(energy, ricker, np.arange(1, 31)).T
+                            vad = cwt(vad, ricker, np.arange(1, 31)).T
                         vocex_output = {
                             "measures": {
                                 "pitch": torch.tensor(pitch),
@@ -88,30 +96,35 @@ class BaselineBURNCollator:
                     for measure in ALL_MEASURES:
                         measures[measure].append(vocex_output["measures"][measure])
                 for m, v in measures.items():
-                    v = [v.flatten() for v in v]
-                    v = np.concatenate(v)
-                    v = torch.tensor(v).unsqueeze(0)
-                    v = (
-                        torchaudio.transforms.Resample(sr, 16000)(v)
-                        .squeeze(0)
-                        .T.numpy()
-                    )
-                    # normalize
-                    if (v.max() - v.min()) == 0:
-                        v = np.zeros_like(v)
+                    if not self.args.use_cwt:
+                        v = [v.flatten() for v in v]
+                        v = np.concatenate(v)
+                        v = torch.tensor(v).unsqueeze(0)
+                        v = (
+                            torchaudio.transforms.Resample(sr, 16000)(v)
+                            .squeeze(0)
+                            .T.numpy()
+                        )
+                        # normalize
+                        if (v.max() - v.min()) == 0:
+                            v = np.zeros_like(v)
+                        else:
+                            if m == "pitch":
+                                v = np.clip(
+                                    v, self.args.pitch_min, self.args.pitch_max
+                                ) / (self.args.pitch_max - self.args.pitch_min)
+                            elif m == "energy":
+                                v = np.clip(
+                                    v, self.args.energy_min, self.args.energy_max
+                                ) / (self.args.energy_max - self.args.energy_min)
+                            elif m == "voice_activity_binary":
+                                v = np.clip(v, self.args.vad_min, self.args.vad_max) / (
+                                    self.args.vad_max - self.args.vad_min
+                                )
                     else:
-                        if m == "pitch":
-                            v = np.clip(v, self.args.pitch_min, self.args.pitch_max) / (
-                                self.args.pitch_max - self.args.pitch_min
-                            )
-                        elif m == "energy":
-                            v = np.clip(
-                                v, self.args.energy_min, self.args.energy_max
-                            ) / (self.args.energy_max - self.args.energy_min)
-                        elif m == "voice_activity_binary":
-                            v = np.clip(v, self.args.vad_min, self.args.vad_max) / (
-                                self.args.vad_max - self.args.vad_min
-                            )
+                        v = [v.numpy() for v in v]
+                        v = np.concatenate(v)
+                        v = torch.from_numpy(v)
                     measures[m] = v
 
                 # take the mean according to batch["word_durations"] (an int in frames)
@@ -125,21 +138,49 @@ class BaselineBURNCollator:
                         measures[measure] = np.array(
                             [
                                 np.mean(
-                                    measures[measure][durations[i] : durations[i + 1]]
+                                    measures[measure][durations[i] : durations[i + 1]],
+                                    axis=0,
                                 )
                                 for i in range(len(durations) - 1)
                             ]
                         )
                     else:
-                        measures[measure] = np.array(
-                            [
-                                interpolate(
-                                    measures[measure][durations[i] : durations[i + 1]],
-                                    self.args.values_per_word,
-                                )
-                                for i in range(len(durations) - 1)
-                            ]
-                        )
+                        if not self.args.use_cwt:
+                            measures[measure] = np.array(
+                                [
+                                    interpolate(
+                                        measures[measure][
+                                            durations[i] : durations[i + 1]
+                                        ],
+                                        self.args.values_per_word,
+                                    )
+                                    for i in range(len(durations) - 1)
+                                ]
+                            )
+                        else:
+                            dims = measures[measure].shape[-1]
+                            # interpolate for each dimension
+                            measures[measure] = np.array(
+                                [
+                                    np.stack(
+                                        [
+                                            interpolate(
+                                                measures[measure][
+                                                    durations[i] : durations[i + 1],
+                                                    j,
+                                                ],
+                                                self.args.values_per_word,
+                                            )
+                                            for j in range(dims)
+                                        ]
+                                    )
+                                    for i in range(len(durations) - 1)
+                                ]
+                            )
+                    # collapse last two dimensions
+                    measures[measure] = measures[measure].reshape(
+                        measures[measure].shape[0], -1
+                    )
                     np.save(
                         Path(audio_path).with_suffix(f".{measure}.npy"),
                         measures[measure],

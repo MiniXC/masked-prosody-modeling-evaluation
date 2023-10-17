@@ -62,6 +62,7 @@ class BURNCollatorArgs:
     vad_min: float = 0
     vad_max: float = 1
     use_algorithmic_features: bool = False
+    use_cwt: bool = False
 
 
 @dataclass
@@ -79,6 +80,7 @@ class RAVDESSCollatorArgs:
     vad_min: float = 0
     vad_max: float = 1
     use_algorithmic_features: bool = False
+    use_cwt: bool = False
 
 
 @dataclass
@@ -96,6 +98,7 @@ class TIMITCollatorArgs:
     vad_min: float = 0
     vad_max: float = 1
     use_algorithmic_features: bool = False
+    use_cwt: bool = False
 
 
 @dataclass

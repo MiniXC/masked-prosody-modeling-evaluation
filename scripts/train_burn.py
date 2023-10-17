@@ -374,6 +374,7 @@ def main():
     collator_args.measures = model_args.measures
 
     model_args.use_mpm = training_args.use_mpm
+    model_args.use_cwt = collator_args.use_cwt
     collator_args.overwrite = training_args.overwrite_data
     if training_args.use_mpm:
         collator_args.name = collator_args.name.replace("default", "prosody_model")
