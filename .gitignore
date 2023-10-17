@@ -2,6 +2,7 @@
 # Template specific #
 #####################
 
+mpm_checkpoints/
 checkpoints/
 outputs/
 wandb/

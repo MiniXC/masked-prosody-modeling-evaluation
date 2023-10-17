@@ -1,5 +1,4 @@
 from pathlib import Path
-from dataclasses import dataclass
 
 import yaml
 import torch
@@ -9,6 +8,7 @@ from rich.console import Console
 
 console = Console()
 
+from configs.args import ModelArgs
 from .modules import (
     PositionalEncoding,
     TransformerEncoder,
@@ -16,20 +16,10 @@ from .modules import (
 )
 
 
-@dataclass
-class ModelArgs:
-    n_layers: int = 8
-    n_heads: int = 2
-    kernel_size: int = 7
-    filter_size: int = 256
-    hidden_dim: int = 512
-    dropout: float = 0.1
-
-
 class MaskedProsodyModel(nn.Module):
     def __init__(
         self,
-        args,
+        args: ModelArgs,
     ):
         super().__init__()
 
@@ -37,7 +27,7 @@ class MaskedProsodyModel(nn.Module):
 
         self.pitch_embedding = nn.Embedding(bins + 2, args.filter_size)
         self.energy_embedding = nn.Embedding(bins + 2, args.filter_size)
-        self.vad_embedding = nn.Embedding(bins + 2, args.filter_size)
+        self.vad_embedding = nn.Embedding(2 + 2, args.filter_size)
 
         self.positional_encoding = PositionalEncoding(args.filter_size)
 
@@ -54,31 +44,16 @@ class MaskedProsodyModel(nn.Module):
             num_layers=args.n_layers,
         )
 
-        self.output_layer = nn.Sequential(
-            nn.Linear(args.filter_size, args.filter_size),
-            nn.LayerNorm((args.max_length, args.filter_size)),
-            nn.GELU(),
-        )
-
         self.output_pitch = nn.Sequential(
-            nn.Linear(args.filter_size, args.filter_size),
-            nn.LayerNorm((args.max_length, args.filter_size)),
-            nn.GELU(),
             nn.Linear(args.filter_size, bins),
         )
 
         self.output_energy = nn.Sequential(
-            nn.Linear(args.filter_size, args.filter_size),
-            nn.LayerNorm((args.max_length, args.filter_size)),
-            nn.GELU(),
             nn.Linear(args.filter_size, bins),
         )
 
         self.output_vad = nn.Sequential(
-            nn.Linear(args.filter_size, args.filter_size),
-            nn.LayerNorm((args.max_length, args.filter_size)),
-            nn.GELU(),
-            nn.Linear(args.filter_size, bins),
+            nn.Linear(args.filter_size, 1),
         )
 
         self.apply(self._init_weights)
@@ -107,29 +82,24 @@ class MaskedProsodyModel(nn.Module):
             x, reprs = self.transformer(x, return_layer=return_layer)
         else:
             x = self.transformer(x)
-        x = self.output_layer(x)
         pitch = self.output_pitch(x)
         energy = self.output_energy(x)
         vad = self.output_vad(x)
         if return_layer is not None:
             return {
-                "y": torch.stack(
-                    [
-                        pitch,
-                        energy,
-                        vad,
-                    ]
-                ).transpose(0, 1),
-                "representations": reprs,
-            }
-        else:
-            return torch.stack(
-                [
+                "y": [
                     pitch,
                     energy,
                     vad,
-                ]
-            ).transpose(0, 1)
+                ],
+                "representations": reprs,
+            }
+        else:
+            return [
+                pitch,
+                energy,
+                vad,
+            ]
 
     def save_model(self, path, accelerator=None, onnx=False):
         path = Path(path)
@@ -175,22 +145,6 @@ class MaskedProsodyModel(nn.Module):
             [
                 torch.randint(0, self.args.bins, (1, self.args.max_length)),
                 torch.randint(0, self.args.bins, (1, self.args.max_length)),
-                torch.randint(0, self.args.bins, (1, self.args.max_length)),
+                torch.randint(0, 2, (1, self.args.max_length)),
             ]
         ).transpose(0, 1)
-
-    def export_onnx(self, path):
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        torch.onnx.export(
-            self,
-            self.dummy_input,
-            path,
-            input_names=["input"],
-            output_names=["output"],
-            dynamic_axes={
-                "input": {0: "batch_size"},
-                "output": {0: "batch_size"},
-            },
-            opset_version=11,
-        )

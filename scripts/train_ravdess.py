@@ -172,10 +172,7 @@ def train_epoch(epoch):
             and global_step % training_args.eval_every_n_steps == 0
             and accelerator.is_main_process
         ):
-            if training_args.do_full_eval:
-                evaluate()
-            else:
-                evaluate_loss_only()
+            evaluate()
             console_rule(f"Epoch {epoch}")
         step += 1
         global_step += 1
@@ -221,36 +218,9 @@ def evaluate():
             "loss": loss,
             "acc": acc,
             "f1": f1,
+            "f1_micro": f1_score(y_true, y_pred, average="micro"),
             "precision": precision,
             "recall": recall,
-        },
-    )
-
-
-def evaluate_loss_only():
-    model.eval()
-    losses = []
-    console_rule("Evaluation")
-    with torch.no_grad():
-        for batch in val_dl:
-            if not training_args.use_mpm:
-                x = torch.cat(
-                    [
-                        batch["measures"][m].unsqueeze(-1)
-                        for m in model_args.measures.split(",")
-                    ],
-                    dim=-1,
-                )
-            else:
-                x = batch["mpm"]
-            y = model(x)
-            loss = torch.nn.functional.cross_entropy(y, batch["emotion_onehot"])
-            losses.append(loss.detach())
-    loss = torch.mean(torch.tensor(losses)).item()
-    wandb_log(
-        "val",
-        {
-            "loss": loss,
         },
     )
 
@@ -335,7 +305,7 @@ def main():
         mask = training_args.mpm_mask_size
         step = training_args.mpm_checkpoint_step
         collator_args.mpm = (
-            f"masked-prosody-modeling/checkpoints/bin{bins}_mask{mask}/step_{step}"
+            f"mpm_checkpoints/bin{bins}_mask{mask}/step_{step}"
         )
 
     validate_args(training_args, model_args, collator_args)
@@ -368,7 +338,7 @@ def main():
     console_print(f"[green]train[/green]: {len(train_ds)}")
     console_print(f"[green]val[/green]: {len(val_ds)}")
 
-    collator = get_collator(collator_args)
+    collator = get_collator(collator_args, device=accelerator.device)
 
     # dataloader
     if training_args.num_workers is None:
@@ -415,10 +385,8 @@ def main():
                 if is_first_batch:
                     if collator_args.name == "default_ravdess":
                         fig = plot_baseline_batch(batch, collator_args)
-                        plt.savefig("figures/first_batch_ravdess.png")
                     elif collator_args.name == "prosody_model_ravdess":
                         fig = plot_prosody_model_batch(batch, collator_args)
-                        plt.savefig("figures/first_batch_ravdess.png")
                     wandb.log({"first_batch": wandb.Image(fig)})
                     is_first_batch = False
     collator.args.overwrite = False

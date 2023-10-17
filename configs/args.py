@@ -56,9 +56,9 @@ class BURNCollatorArgs:
     mpm: str = None
     mpm_layer: int = -1
     pitch_min: float = 50
-    pitch_max: float = 400
+    pitch_max: float = 300
     energy_min: float = 0
-    energy_max: float = 1
+    energy_max: float = 0.2
     vad_min: float = 0
     vad_max: float = 1
     use_algorithmic_features: bool = False
@@ -145,3 +145,13 @@ class HeatmapArgs:
     type: str = "intrinsic"  # can be "intrinsic" or "extrinsic"
     measure: str = "vad_mae"
     dataset: str = "burn"
+
+
+@dataclass
+class ModelArgs:
+    n_layers: int = 16
+    n_heads: int = 2
+    kernel_size: int = 7
+    filter_size: int = 256
+    hidden_dim: int = 512
+    dropout: float = 0.1

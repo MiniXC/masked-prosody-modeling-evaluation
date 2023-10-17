@@ -242,6 +242,7 @@ class ProsodyModelBURNCollator:
     def __init__(
         self,
         args: BURNCollatorArgs,
+        device: torch.device = None,
     ):
         """
         Collator for the baseline model, which extracts
@@ -256,7 +257,14 @@ class ProsodyModelBURNCollator:
         self.args = args
         self.vocex = Vocex.from_pretrained(self.args.vocex, fp16=self.args.vocex_fp16)
         self.mpm = MaskedProsodyModel.from_pretrained(self.args.mpm)
+        if device is not None:
+            self.mpm.to(device)
+        self.device = device
         self.bins = torch.linspace(0, 1, self.mpm.args.bins)
+        if args.use_algorithmic_features:
+            self.pitch_measure = PitchMeasure()
+            self.energy_measure = EnergyMeasure()
+            self.voice_activity_measure = VoiceActivityMeasure()
 
     def __call__(self, batch):
         results = []
@@ -273,30 +281,31 @@ class ProsodyModelBURNCollator:
                 for i in range(0, len(audio), 96000):
                     windows.append(audio[i : i + 96000])
                 for i, w in enumerate(windows):
-                    vocex_output = self.vocex(w, sr)
-                    pitch = vocex_output["measures"]["pitch"]
-                    energy = vocex_output["measures"]["energy"]
-                    vad = vocex_output["measures"]["voice_activity_binary"]
+                    if not self.args.use_algorithmic_features:
+                        vocex_output = self.vocex(w, sr)
+                        pitch = vocex_output["measures"]["pitch"]
+                        energy = vocex_output["measures"]["energy"]
+                        vad = vocex_output["measures"]["voice_activity_binary"]
+                    else:
+                        # resample w to 22050
+                        w = librosa.resample(w, orig_sr=sr, target_sr=22050)
+                        pitch = self.pitch_measure(w, np.array([1000]))["measure"]
+                        energy = self.energy_measure(w, np.array([1000]))["measure"]
+                        vad = self.voice_activity_measure(w, np.array([1000]))[
+                            "measure"
+                        ]
                     # normalize using pitch_min, pitch_max, energy_min, energy_max, vad_min, vad_max
                     pitch = torch.clip(
-                        pitch, self.args.pitch_min, self.args.pitch_max
+                        torch.tensor(pitch).unsqueeze(0), self.args.pitch_min, self.args.pitch_max
                     ) / (self.args.pitch_max - self.args.pitch_min)
                     energy = torch.clip(
-                        energy, self.args.energy_min, self.args.energy_max
+                        torch.tensor(energy).unsqueeze(0), self.args.energy_min, self.args.energy_max
                     ) / (self.args.energy_max - self.args.energy_min)
-                    vad = torch.clip(vad, self.args.vad_min, self.args.vad_max)
+                    vad = torch.clip(torch.tensor(vad).unsqueeze(0), self.args.vad_min, self.args.vad_max)
                     # bucketize
-                    pitch = torch.clip(
-                        torch.bucketize(pitch, self.bins) + 2, 0, self.mpm.args.bins + 1
-                    )
-                    energy = torch.clip(
-                        torch.bucketize(energy, self.bins) + 2,
-                        0,
-                        self.mpm.args.bins + 1,
-                    )
-                    vad = torch.clip(
-                        torch.bucketize(vad, self.bins) + 2, 0, self.mpm.args.bins + 1
-                    )
+                    torch.bucketize(pitch, self.bins) + 2
+                    torch.bucketize(energy, self.bins) + 2
+                    torch.bucketize(vad, torch.linspace(0, 1, 2)) + 2
                     mpm_input = torch.stack(
                         [
                             pitch,
@@ -304,29 +313,33 @@ class ProsodyModelBURNCollator:
                             vad,
                         ]
                     ).transpose(0, 1)
+                    if self.device is not None:
+                        mpm_input = mpm_input.to(self.device)
                     mpm_input = mpm_input[:, :, : self.mpm.args.max_length]
                     prev_len = mpm_input.shape[-1]
                     if mpm_input.shape[-1] < self.mpm.args.max_length:
+                        zs = torch.zeros(
+                            (
+                                mpm_input.shape[0],
+                                mpm_input.shape[1],
+                                self.mpm.args.max_length - prev_len,
+                            )
+                        )
+                        if self.device is not None:
+                            zs = zs.to(self.device)
                         mpm_input = torch.cat(
                             [
                                 mpm_input,
-                                torch.zeros(
-                                    (
-                                        mpm_input.shape[0],
-                                        mpm_input.shape[1],
-                                        self.mpm.args.max_length - prev_len,
-                                    )
-                                ),
+                                zs,
                             ],
                             dim=-1,
                         )
-                    mpm_output = self.mpm(
-                        mpm_input.long(), return_layer=self.args.mpm_layer
-                    )
-                    out = mpm_output["representations"]
-                    out = out[0, :prev_len, :]
-                    mpms.append(out)
-                mpms = torch.cat(mpms)
+                    mpms.append(mpm_input.long())
+                mpms_batch = torch.stack(mpms, dim=1).squeeze(0)
+                mpm_output = self.mpm(mpms_batch, return_layer=self.args.mpm_layer)
+                mpms = mpm_output["representations"].detach().cpu()
+                # concat to go from (batch_size, len, hidden_dim) to (len, hidden_dim)
+                mpms = mpms.reshape(-1, mpms.shape[-1])
                 word_mpms = []
                 # take the mean according to batch["word_durations"] (an int in frames)
                 durations = np.cumsum(batch["word_durations"][k])
@@ -523,6 +536,7 @@ class ProsodyModelRAVDESSCollator:
     def __init__(
         self,
         args: RAVDESSCollatorArgs,
+        device: torch.device = None,
     ):
         """
         Collator for the baseline model, which extracts
@@ -547,7 +561,14 @@ class ProsodyModelRAVDESSCollator:
             "surprised": 7,
         }
         self.mpm = MaskedProsodyModel.from_pretrained(self.args.mpm)
+        if device is not None:
+            self.mpm.to(device)
+        self.device = device
         self.bins = torch.linspace(0, 1, self.mpm.args.bins)
+        if args.use_algorithmic_features:
+            self.pitch_measure = PitchMeasure()
+            self.energy_measure = EnergyMeasure()
+            self.voice_activity_measure = VoiceActivityMeasure()
 
     def __call__(self, batch):
         results = []
@@ -558,30 +579,31 @@ class ProsodyModelRAVDESSCollator:
             file = Path(audio_path).with_suffix(f".mpm.npy")
             if (not file.exists()) or self.args.overwrite:
                 audio, sr = audio["array"], audio["sampling_rate"]
-                vocex_output = self.vocex(audio, sr)
-                pitch = vocex_output["measures"]["pitch"]
-                energy = vocex_output["measures"]["energy"]
-                vad = vocex_output["measures"]["voice_activity_binary"]
+                if not self.args.use_algorithmic_features:
+                    vocex_output = self.vocex(audio, sr)
+                    pitch = vocex_output["measures"]["pitch"]
+                    energy = vocex_output["measures"]["energy"]
+                    vad = vocex_output["measures"]["voice_activity_binary"]
+                else:
+                    # resample w to 22050
+                    audio = librosa.resample(audio, orig_sr=sr, target_sr=22050)
+                    pitch = self.pitch_measure(audio, np.array([1000]))["measure"]
+                    energy = self.energy_measure(audio, np.array([1000]))["measure"]
+                    vad = self.voice_activity_measure(audio, np.array([1000]))[
+                        "measure"
+                    ]
                 # normalize using pitch_min, pitch_max, energy_min, energy_max, vad_min, vad_max
-                pitch = torch.clip(pitch, self.args.pitch_min, self.args.pitch_max) / (
-                    self.args.pitch_max - self.args.pitch_min
-                )
-                energy = torch.clip(
-                    energy, self.args.energy_min, self.args.energy_max
-                ) / (self.args.energy_max - self.args.energy_min)
-                vad = torch.clip(vad, self.args.vad_min, self.args.vad_max)
-                # bucketize
                 pitch = torch.clip(
-                    torch.bucketize(pitch, self.bins) + 2, 0, self.mpm.args.bins + 1
-                )
+                    torch.tensor(pitch).unsqueeze(0), self.args.pitch_min, self.args.pitch_max
+                ) / (self.args.pitch_max - self.args.pitch_min)
                 energy = torch.clip(
-                    torch.bucketize(energy, self.bins) + 2,
-                    0,
-                    self.mpm.args.bins + 1,
-                )
-                vad = torch.clip(
-                    torch.bucketize(vad, self.bins) + 2, 0, self.mpm.args.bins + 1
-                )
+                    torch.tensor(energy).unsqueeze(0), self.args.energy_min, self.args.energy_max
+                ) / (self.args.energy_max - self.args.energy_min)
+                vad = torch.clip(torch.tensor(vad).unsqueeze(0), self.args.vad_min, self.args.vad_max)
+                # bucketize
+                torch.bucketize(pitch, self.bins) + 2
+                torch.bucketize(energy, self.bins) + 2
+                torch.bucketize(vad, torch.linspace(0, 1, 2)) + 2
                 mpm_input = torch.stack(
                     [
                         pitch,
@@ -589,6 +611,8 @@ class ProsodyModelRAVDESSCollator:
                         vad,
                     ]
                 ).transpose(0, 1)
+                if self.device is not None:
+                    mpm_input = mpm_input.to(self.device)
                 prev_len = mpm_input.shape[-1]
                 if mpm_input.shape[-1] < self.mpm.args.max_length:
                     mpm_input = torch.cat(
@@ -600,14 +624,14 @@ class ProsodyModelRAVDESSCollator:
                                     mpm_input.shape[1],
                                     self.mpm.args.max_length - prev_len,
                                 )
-                            ),
+                            ).to(mpm_input.device),
                         ],
                         dim=-1,
                     )
                 mpm_output = self.mpm(
                     mpm_input.long(), return_layer=self.args.mpm_layer
                 )
-                out = mpm_output["representations"]
+                out = mpm_output["representations"].detach().cpu()
                 out = out[0, :prev_len, :]
                 np.save(
                     Path(audio_path).with_suffix(f".mpm.npy"),
@@ -813,6 +837,7 @@ class ProsodyModelTIMITCollator:
     def __init__(
         self,
         args: TIMITCollatorArgs,
+        device: torch.device = None,
     ):
         """
         Collator for the baseline model, which extracts
@@ -828,6 +853,13 @@ class ProsodyModelTIMITCollator:
         self.vocex = Vocex.from_pretrained(self.args.vocex, fp16=self.args.vocex_fp16)
         self.mpm = MaskedProsodyModel.from_pretrained(self.args.mpm)
         self.bins = torch.linspace(0, 1, self.mpm.args.bins)
+        if device is not None:
+            self.mpm.to(device)
+        self.device = device
+        if args.use_algorithmic_features:
+            self.pitch_measure = PitchMeasure()
+            self.energy_measure = EnergyMeasure()
+            self.voice_activity_measure = VoiceActivityMeasure()
 
     def __call__(self, batch):
         batch = {k: [d[k] for d in batch] for k in batch[0]}
@@ -841,30 +873,31 @@ class ProsodyModelTIMITCollator:
             file = Path(audio_path).with_suffix(f".mpm.npy")
             if (not file.exists()) or self.args.overwrite:
                 audio, sr = audio["array"], audio["sampling_rate"]
-                vocex_output = self.vocex(audio, sr)
-                pitch = vocex_output["measures"]["pitch"]
-                energy = vocex_output["measures"]["energy"]
-                vad = vocex_output["measures"]["voice_activity_binary"]
+                if not self.args.use_algorithmic_features:
+                    vocex_output = self.vocex(audio, sr)
+                    pitch = vocex_output["measures"]["pitch"]
+                    energy = vocex_output["measures"]["energy"]
+                    vad = vocex_output["measures"]["voice_activity_binary"]
+                else:
+                    # resample w to 22050
+                    audio = librosa.resample(audio, orig_sr=sr, target_sr=22050)
+                    pitch = self.pitch_measure(audio, np.array([1000]))["measure"]
+                    energy = self.energy_measure(audio, np.array([1000]))["measure"]
+                    vad = self.voice_activity_measure(audio, np.array([1000]))[
+                        "measure"
+                    ]
                 # normalize using pitch_min, pitch_max, energy_min, energy_max, vad_min, vad_max
-                pitch = torch.clip(pitch, self.args.pitch_min, self.args.pitch_max) / (
-                    self.args.pitch_max - self.args.pitch_min
-                )
-                energy = torch.clip(
-                    energy, self.args.energy_min, self.args.energy_max
-                ) / (self.args.energy_max - self.args.energy_min)
-                vad = torch.clip(vad, self.args.vad_min, self.args.vad_max)
-                # bucketize
                 pitch = torch.clip(
-                    torch.bucketize(pitch, self.bins) + 2, 0, self.mpm.args.bins + 1
-                )
+                    torch.tensor(pitch).unsqueeze(0), self.args.pitch_min, self.args.pitch_max
+                ) / (self.args.pitch_max - self.args.pitch_min)
                 energy = torch.clip(
-                    torch.bucketize(energy, self.bins) + 2,
-                    0,
-                    self.mpm.args.bins + 1,
-                )
-                vad = torch.clip(
-                    torch.bucketize(vad, self.bins) + 2, 0, self.mpm.args.bins + 1
-                )
+                    torch.tensor(energy).unsqueeze(0), self.args.energy_min, self.args.energy_max
+                ) / (self.args.energy_max - self.args.energy_min)
+                vad = torch.clip(torch.tensor(vad).unsqueeze(0), self.args.vad_min, self.args.vad_max)
+                # bucketize
+                torch.bucketize(pitch, self.bins) + 2
+                torch.bucketize(energy, self.bins) + 2
+                torch.bucketize(vad, torch.linspace(0, 1, 2)) + 2
                 mpm_input = torch.stack(
                     [
                         pitch,
@@ -872,6 +905,8 @@ class ProsodyModelTIMITCollator:
                         vad,
                     ]
                 ).transpose(0, 1)
+                if self.device is not None:
+                    mpm_input = mpm_input.to(self.device)
                 prev_len = mpm_input.shape[-1]
                 if mpm_input.shape[-1] < self.mpm.args.max_length:
                     mpm_input = torch.cat(
@@ -883,7 +918,7 @@ class ProsodyModelTIMITCollator:
                                     mpm_input.shape[1],
                                     self.mpm.args.max_length - prev_len,
                                 )
-                            ),
+                            ).to(mpm_input.device),
                         ],
                         dim=-1,
                     )
@@ -892,7 +927,7 @@ class ProsodyModelTIMITCollator:
                 mpm_output = self.mpm(
                     mpm_input.long(), return_layer=self.args.mpm_layer
                 )
-                out = mpm_output["representations"]
+                out = mpm_output["representations"].detach().cpu()
                 if prev_len < self.mpm.args.max_length:
                     out = out[0, :prev_len, :]
                 else:

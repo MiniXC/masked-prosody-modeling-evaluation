@@ -136,20 +136,15 @@ def train_epoch(epoch):
             else:
                 x = batch["mpm"]
             y = model(x)
-            phon_loss = torchvision.ops.focal_loss.sigmoid_focal_loss(
+            phon_loss = torch.nn.functional.binary_cross_entropy_with_logits(
                 y[:, :, 0],
                 batch["phoneme_boundaries"].float(),
                 reduction="none",
-                alpha=training_args.timit_phon_focal_loss_alpha,
             )
-            word_loss = (
-                torchvision.ops.focal_loss.sigmoid_focal_loss(
-                    y[:, :, 1],
-                    batch["word_boundaries"].float(),
-                    reduction="none",
-                    alpha=training_args.timit_word_focal_loss_alpha,
-                )
-                * 2
+            word_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                y[:, :, 1],
+                batch["word_boundaries"].float(),
+                reduction="none",
             )
             mask_len = batch["mask"].shape[-1]
             phon_loss *= batch["mask"]
@@ -233,20 +228,15 @@ def evaluate():
             else:
                 x = batch["mpm"]
             y = model(x)
-            phon_loss = torchvision.ops.focal_loss.sigmoid_focal_loss(
+            phon_loss = torch.nn.functional.binary_cross_entropy_with_logits(
                 y[:, :, 0],
                 batch["phoneme_boundaries"].float(),
                 reduction="none",
-                alpha=training_args.timit_phon_focal_loss_alpha,
             )
-            word_loss = (
-                torchvision.ops.focal_loss.sigmoid_focal_loss(
-                    y[:, :, 1],
-                    batch["word_boundaries"].float(),
-                    reduction="none",
-                    alpha=training_args.timit_word_focal_loss_alpha,
-                )
-                * 2
+            word_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                y[:, :, 1],
+                batch["word_boundaries"].float(),
+                reduction="none",
             )
             mask_len = batch["mask"].shape[-1]
             phon_loss *= batch["mask"]
@@ -267,10 +257,33 @@ def evaluate():
             y_pred_phon.append(torch.sigmoid(y[:, :, 0])[batch["mask"] == 1].flatten())
             y_true_word.append(batch["word_boundaries"][batch["mask"] == 1].flatten())
             y_pred_word.append(torch.sigmoid(y[:, :, 1])[batch["mask"] == 1].flatten())
+    # get threshold using 10% of data
     y_true_phon = torch.cat(y_true_phon).cpu().numpy()
-    y_pred_phon = torch.round(torch.cat(y_pred_phon)).cpu().numpy()
+    y_pred_phon = torch.cat(y_pred_phon).cpu().numpy()
     y_true_word = torch.cat(y_true_word).cpu().numpy()
-    y_pred_word = torch.round(torch.cat(y_pred_word)).cpu().numpy()
+    y_pred_word = torch.cat(y_pred_word).cpu().numpy()
+    percent_10 = int(len(y_true_phon) * 0.1)
+    y_true_phon_t = y_true_phon[:percent_10]
+    y_pred_phon_t = y_pred_phon[:percent_10]
+    y_true_word_t = y_true_word[:percent_10]
+    y_pred_word_t = y_pred_word[:percent_10]
+    best_phon_threshold = 0
+    best_word_threshold = 0
+    best_phon_f1 = 0
+    best_word_f1 = 0
+    for threshold in np.arange(0, 1, 0.01):
+        phon_f1 = f1_score(y_true_phon_t, y_pred_phon_t > threshold)
+        word_f1 = f1_score(y_true_word_t, y_pred_word_t > threshold)
+        if phon_f1 > best_phon_f1:
+            best_phon_f1 = phon_f1
+            best_phon_threshold = threshold
+        if word_f1 > best_word_f1:
+            best_word_f1 = word_f1
+            best_word_threshold = threshold
+    y_pred_phon = (y_pred_phon > best_phon_threshold)[percent_10:]
+    y_pred_word = (y_pred_word > best_word_threshold)[percent_10:]
+    y_true_phon = y_true_phon[percent_10:]
+    y_true_word = y_true_word[percent_10:]
     console_print(f"[green]pct. positive phoneme[/green]: {y_true_phon.mean():.3f}")
     console_print(f"[green]pct. positive word[/green]: {y_true_word.mean():.3f}")
     wandb_log(
@@ -287,6 +300,8 @@ def evaluate():
             "word_precision": precision_score(y_true_word, y_pred_word),
             "word_recall": recall_score(y_true_word, y_pred_word),
             "word_accuracy": accuracy_score(y_true_word, y_pred_word),
+            "phon_threshold": best_phon_threshold,
+            "word_threshold": best_word_threshold,
         },
     )
 
@@ -425,7 +440,7 @@ def main():
         mask = training_args.mpm_mask_size
         step = training_args.mpm_checkpoint_step
         collator_args.mpm = (
-            f"masked-prosody-modeling/checkpoints/bin{bins}_mask{mask}/step_{step}"
+            f"mpm_checkpoints/bin{bins}_mask{mask}/step_{step}"
         )
     validate_args(training_args, model_args, collator_args)
 
@@ -461,7 +476,7 @@ def main():
     console_print(f"[green]train[/green]: {len(train_ds)}")
     console_print(f"[green]val[/green]: {len(val_ds)}")
 
-    collator = get_collator(collator_args)
+    collator = get_collator(collator_args, device=accelerator.device)
 
     # dataloader
     if training_args.num_workers is None:
@@ -507,10 +522,8 @@ def main():
                 if is_first_batch:
                     if collator_args.name == "default_timit":
                         fig = plot_baseline_batch(batch, collator_args)
-                        plt.savefig("figures/first_batch_timit.png")
                     elif collator_args.name == "prosody_model_timit":
                         fig = plot_prosody_batch(batch, collator_args)
-                        plt.savefig("figures/first_batch_timit.png")
                     wandb.log({"first_batch": wandb.Image(fig)})
                     is_first_batch = False
     collator.args.overwrite = False
