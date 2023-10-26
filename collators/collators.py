@@ -32,6 +32,7 @@ class BaselineBURNCollator:
     def __init__(
         self,
         args: BURNCollatorArgs,
+        device: torch.device = None,
     ):
         """
         Collator for the baseline model, which extracts
@@ -81,9 +82,15 @@ class BaselineBURNCollator:
                             pitch = (pitch - pitch.mean()) / (pitch.std() + 1e-8)
                             energy = (energy - energy.mean()) / (energy.std() + 1e-8)
                             vad = (vad - vad.mean()) / (vad.std() + 1e-8)
-                            pitch = cwt(pitch, ricker, np.arange(1, 31)).T
-                            energy = cwt(energy, ricker, np.arange(1, 31)).T
-                            vad = cwt(vad, ricker, np.arange(1, 31)).T
+                            pitch = cwt(
+                                pitch, ricker, np.arange(1, self.args.cwt_n_bins + 1)
+                            ).T
+                            energy = cwt(
+                                energy, ricker, np.arange(1, self.args.cwt_n_bins + 1)
+                            ).T
+                            vad = cwt(
+                                vad, ricker, np.arange(1, self.args.cwt_n_bins + 1)
+                            ).T
                         vocex_output = {
                             "measures": {
                                 "pitch": torch.tensor(pitch),
@@ -296,12 +303,20 @@ class ProsodyModelBURNCollator:
                         ]
                     # normalize using pitch_min, pitch_max, energy_min, energy_max, vad_min, vad_max
                     pitch = torch.clip(
-                        torch.tensor(pitch).unsqueeze(0), self.args.pitch_min, self.args.pitch_max
+                        torch.tensor(pitch).unsqueeze(0),
+                        self.args.pitch_min,
+                        self.args.pitch_max,
                     ) / (self.args.pitch_max - self.args.pitch_min)
                     energy = torch.clip(
-                        torch.tensor(energy).unsqueeze(0), self.args.energy_min, self.args.energy_max
+                        torch.tensor(energy).unsqueeze(0),
+                        self.args.energy_min,
+                        self.args.energy_max,
                     ) / (self.args.energy_max - self.args.energy_min)
-                    vad = torch.clip(torch.tensor(vad).unsqueeze(0), self.args.vad_min, self.args.vad_max)
+                    vad = torch.clip(
+                        torch.tensor(vad).unsqueeze(0),
+                        self.args.vad_min,
+                        self.args.vad_max,
+                    )
                     # bucketize
                     torch.bucketize(pitch, self.bins) + 2
                     torch.bucketize(energy, self.bins) + 2
@@ -411,6 +426,7 @@ class BaselineRAVDESSCollator:
     def __init__(
         self,
         args: RAVDESSCollatorArgs,
+        device: torch.device = None,
     ):
         """
         Collator for the baseline model, which extracts
@@ -460,6 +476,17 @@ class BaselineRAVDESSCollator:
                     vad = self.voice_activity_measure(audio, np.array([1000]))[
                         "measure"
                     ]
+                    if self.args.use_cwt:
+                        pitch = (pitch - pitch.mean()) / (pitch.std() + 1e-8)
+                        energy = (energy - energy.mean()) / (energy.std() + 1e-8)
+                        vad = (vad - vad.mean()) / (vad.std() + 1e-8)
+                        pitch = cwt(
+                            pitch, ricker, np.arange(1, self.args.cwt_n_bins + 1)
+                        ).T
+                        energy = cwt(
+                            energy, ricker, np.arange(1, self.args.cwt_n_bins + 1)
+                        ).T
+                        vad = cwt(vad, ricker, np.arange(1, self.args.cwt_n_bins + 1)).T
                     vocex_output = {
                         "measures": {
                             "pitch": torch.tensor(pitch),
@@ -470,24 +497,29 @@ class BaselineRAVDESSCollator:
                 else:
                     vocex_output = self.vocex(audio, sr)
                 for measure in ALL_MEASURES:
-                    v = vocex_output["measures"][measure]
-                    v = v.flatten()
-                    # min-max normalize
-                    if (v.max() - v.min()) == 0:
-                        v = np.zeros_like(v)
+                    if not self.args.use_cwt:
+                        v = vocex_output["measures"][measure]
+                        v = v.flatten()
+                        # min-max normalize
+                        if (v.max() - v.min()) == 0:
+                            v = np.zeros_like(v)
+                        else:
+                            if measure == "pitch":
+                                v = np.clip(
+                                    v, self.args.pitch_min, self.args.pitch_max
+                                ) / (self.args.pitch_max - self.args.pitch_min)
+                            elif measure == "energy":
+                                v = np.clip(
+                                    v, self.args.energy_min, self.args.energy_max
+                                ) / (self.args.energy_max - self.args.energy_min)
+                            elif measure == "voice_activity_binary":
+                                v = np.clip(v, self.args.vad_min, self.args.vad_max) / (
+                                    self.args.vad_max - self.args.vad_min
+                                )
                     else:
-                        if measure == "pitch":
-                            v = np.clip(v, self.args.pitch_min, self.args.pitch_max) / (
-                                self.args.pitch_max - self.args.pitch_min
-                            )
-                        elif measure == "energy":
-                            v = np.clip(
-                                v, self.args.energy_min, self.args.energy_max
-                            ) / (self.args.energy_max - self.args.energy_min)
-                        elif measure == "voice_activity_binary":
-                            v = np.clip(v, self.args.vad_min, self.args.vad_max) / (
-                                self.args.vad_max - self.args.vad_min
-                            )
+                        v = vocex_output["measures"][measure]
+                        v = v.numpy()
+
                     measures[measure] = v
 
                     np.save(
@@ -515,14 +547,38 @@ class BaselineRAVDESSCollator:
 
         # pad measures
         for measure in results:
-            batch["measures"][measure] = torch.tensor(
-                np.array(
-                    [
-                        np.pad(r, (0, max_len - r.shape[0]))
-                        for r in batch["measures"][measure]
-                    ]
+            if not self.args.use_cwt:
+                batch["measures"][measure] = torch.tensor(
+                    np.array(
+                        [
+                            np.pad(r, (0, max_len - r.shape[0]))
+                            for r in batch["measures"][measure]
+                        ]
+                    )
+                ).to(torch.float32)
+            else:
+                dims = batch["measures"][measure][0].shape[-1]
+                # interpolate for each dimension
+                batch["measures"][measure] = (
+                    torch.tensor(
+                        np.array(
+                            [
+                                np.stack(
+                                    [
+                                        interpolate(
+                                            r[:, j],
+                                            max_len,
+                                        )
+                                        for j in range(dims)
+                                    ]
+                                )
+                                for r in batch["measures"][measure]
+                            ]
+                        )
+                    )
+                    .to(torch.float32)
+                    .transpose(1, 2)
                 )
-            ).to(torch.float32)
 
         batch["emotion"] = torch.tensor(batch["labels"]).long()
         batch["emotion_onehot"] = F.one_hot(
@@ -594,12 +650,18 @@ class ProsodyModelRAVDESSCollator:
                     ]
                 # normalize using pitch_min, pitch_max, energy_min, energy_max, vad_min, vad_max
                 pitch = torch.clip(
-                    torch.tensor(pitch).unsqueeze(0), self.args.pitch_min, self.args.pitch_max
+                    torch.tensor(pitch).unsqueeze(0),
+                    self.args.pitch_min,
+                    self.args.pitch_max,
                 ) / (self.args.pitch_max - self.args.pitch_min)
                 energy = torch.clip(
-                    torch.tensor(energy).unsqueeze(0), self.args.energy_min, self.args.energy_max
+                    torch.tensor(energy).unsqueeze(0),
+                    self.args.energy_min,
+                    self.args.energy_max,
                 ) / (self.args.energy_max - self.args.energy_min)
-                vad = torch.clip(torch.tensor(vad).unsqueeze(0), self.args.vad_min, self.args.vad_max)
+                vad = torch.clip(
+                    torch.tensor(vad).unsqueeze(0), self.args.vad_min, self.args.vad_max
+                )
                 # bucketize
                 torch.bucketize(pitch, self.bins) + 2
                 torch.bucketize(energy, self.bins) + 2
@@ -670,6 +732,7 @@ class BaselineTIMITCollator:
     def __init__(
         self,
         args: TIMITCollatorArgs,
+        device: torch.device = None,
     ):
         """
         Collator for the baseline model, which extracts
@@ -712,6 +775,17 @@ class BaselineTIMITCollator:
                     vad = self.voice_activity_measure(audio, np.array([1000]))[
                         "measure"
                     ]
+                    if self.args.use_cwt:
+                        pitch = (pitch - pitch.mean()) / (pitch.std() + 1e-8)
+                        energy = (energy - energy.mean()) / (energy.std() + 1e-8)
+                        vad = (vad - vad.mean()) / (vad.std() + 1e-8)
+                        pitch = cwt(
+                            pitch, ricker, np.arange(1, self.args.cwt_n_bins + 1)
+                        ).T
+                        energy = cwt(
+                            energy, ricker, np.arange(1, self.args.cwt_n_bins + 1)
+                        ).T
+                        vad = cwt(vad, ricker, np.arange(1, self.args.cwt_n_bins + 1)).T
                     vocex_output = {
                         "measures": {
                             "pitch": torch.tensor(pitch),
@@ -722,25 +796,30 @@ class BaselineTIMITCollator:
                 else:
                     vocex_output = self.vocex(audio, sr)
                 for measure in ALL_MEASURES:
-                    v = vocex_output["measures"][measure]
-                    v = v.flatten()
-                    vocex_len = len(v)
-                    # min-max normalize
-                    if (v.max() - v.min()) == 0:
-                        v = np.zeros_like(v)
+                    if not self.args.use_cwt:
+                        v = vocex_output["measures"][measure]
+                        v = v.flatten()
+                        vocex_len = len(v)
+                        # min-max normalize
+                        if (v.max() - v.min()) == 0:
+                            v = np.zeros_like(v)
+                        else:
+                            if measure == "pitch":
+                                v = np.clip(
+                                    v, self.args.pitch_min, self.args.pitch_max
+                                ) / (self.args.pitch_max - self.args.pitch_min)
+                            elif measure == "energy":
+                                v = np.clip(
+                                    v, self.args.energy_min, self.args.energy_max
+                                ) / (self.args.energy_max - self.args.energy_min)
+                            elif measure == "voice_activity_binary":
+                                v = np.clip(v, self.args.vad_min, self.args.vad_max) / (
+                                    self.args.vad_max - self.args.vad_min
+                                )
                     else:
-                        if measure == "pitch":
-                            v = np.clip(v, self.args.pitch_min, self.args.pitch_max) / (
-                                self.args.pitch_max - self.args.pitch_min
-                            )
-                        elif measure == "energy":
-                            v = np.clip(
-                                v, self.args.energy_min, self.args.energy_max
-                            ) / (self.args.energy_max - self.args.energy_min)
-                        elif measure == "voice_activity_binary":
-                            v = np.clip(v, self.args.vad_min, self.args.vad_max) / (
-                                self.args.vad_max - self.args.vad_min
-                            )
+                        v = vocex_output["measures"][measure]
+                        v = v.numpy()
+                        vocex_len = len(v)
                     measures[measure] = v
 
                     np.save(
@@ -752,24 +831,58 @@ class BaselineTIMITCollator:
 
             # fold up measures such the the length is half the original length, but we have an additional dimension
             for measure in results:
-                results[measure][-1] = np.array(
-                    [
-                        np.array(
-                            [
-                                results[measure][-1][i],
-                                results[measure][-1][i + 1],
-                            ]
-                        )
-                        if i + 1 < len(results[measure][-1])
-                        else np.array(
-                            [
-                                results[measure][-1][i],
-                                results[measure][-1][i],
-                            ]
-                        )
-                        for i in range(0, len(results[measure][-1]), 2)
-                    ]
-                )
+                if not self.args.use_cwt:
+                    results[measure][-1] = np.array(
+                        [
+                            np.array(
+                                [
+                                    results[measure][-1][i],
+                                    results[measure][-1][i + 1],
+                                ]
+                            )
+                            if i + 1 < len(results[measure][-1])
+                            else np.array(
+                                [
+                                    results[measure][-1][i],
+                                    results[measure][-1][i],
+                                ]
+                            )
+                            for i in range(0, len(results[measure][-1]), 2)
+                        ]
+                    )
+                else:
+                    results[measure][-1] = np.array(
+                        [
+                            np.array(
+                                [
+                                    results[measure][-1][i],
+                                    results[measure][-1][i + 1],
+                                ]
+                            )
+                            if i + 1 < len(results[measure][-1])
+                            else np.array(
+                                [
+                                    results[measure][-1][i],
+                                    results[measure][-1][i],
+                                ]
+                            )
+                            for i in range(0, len(results[measure][-1]), 2)
+                        ]
+                    )
+                    results[measure][-1] = np.array(
+                        [
+                            np.array(
+                                [
+                                    interpolate(
+                                        results[measure][-1][i, :, j],
+                                        vocex_len,
+                                    )
+                                    for j in range(results[measure][-1].shape[-1])
+                                ]
+                            )
+                            for i in range(results[measure][-1].shape[0])
+                        ]
+                    )
 
             vocex_len = np.ceil(vocex_len / 2).astype(int)
 
@@ -810,6 +923,7 @@ class BaselineTIMITCollator:
 
         # pad measures
         for measure in results:
+            print([r.shape for r in batch["measures"][measure]])
             batch["measures"][measure] = torch.tensor(
                 np.array(
                     [
@@ -888,12 +1002,18 @@ class ProsodyModelTIMITCollator:
                     ]
                 # normalize using pitch_min, pitch_max, energy_min, energy_max, vad_min, vad_max
                 pitch = torch.clip(
-                    torch.tensor(pitch).unsqueeze(0), self.args.pitch_min, self.args.pitch_max
+                    torch.tensor(pitch).unsqueeze(0),
+                    self.args.pitch_min,
+                    self.args.pitch_max,
                 ) / (self.args.pitch_max - self.args.pitch_min)
                 energy = torch.clip(
-                    torch.tensor(energy).unsqueeze(0), self.args.energy_min, self.args.energy_max
+                    torch.tensor(energy).unsqueeze(0),
+                    self.args.energy_min,
+                    self.args.energy_max,
                 ) / (self.args.energy_max - self.args.energy_min)
-                vad = torch.clip(torch.tensor(vad).unsqueeze(0), self.args.vad_min, self.args.vad_max)
+                vad = torch.clip(
+                    torch.tensor(vad).unsqueeze(0), self.args.vad_min, self.args.vad_max
+                )
                 # bucketize
                 torch.bucketize(pitch, self.bins) + 2
                 torch.bucketize(energy, self.bins) + 2

@@ -382,6 +382,7 @@ def main():
 
     model_args.use_mpm = training_args.use_mpm
     model_args.use_cwt = collator_args.use_cwt
+    model_args.cwt_n_bins = collator_args.cwt_n_bins
     collator_args.overwrite = training_args.overwrite_data
     if training_args.use_mpm:
         collator_args.name = collator_args.name.replace("default", "prosody_model")
@@ -389,7 +390,8 @@ def main():
         mask = training_args.mpm_mask_size
         step = training_args.mpm_checkpoint_step
         collator_args.mpm = (
-            f"masked-prosody-modeling/checkpoints/bin{bins}_mask{mask}/step_{step}"
+            "cdminix/masked_prosody_model"
+            # f"masked-prosody-modeling/checkpoints/bin{bins}_mask{mask}/step_{step}"
         )
 
     validate_args(training_args, model_args, collator_args)

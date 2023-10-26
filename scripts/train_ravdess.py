@@ -126,13 +126,19 @@ def train_epoch(epoch):
     for batch in train_dl:
         with accelerator.accumulate(model):
             if not training_args.use_mpm:
-                x = torch.cat(
-                    [
-                        batch["measures"][m].unsqueeze(-1)
-                        for m in model_args.measures.split(",")
-                    ],
-                    dim=-1,
-                )
+                if not collator_args.use_cwt:
+                    x = torch.cat(
+                        [
+                            batch["measures"][m].unsqueeze(-1)
+                            for m in model_args.measures.split(",")
+                        ],
+                        dim=-1,
+                    )
+                else:
+                    x = torch.cat(
+                        [batch["measures"][m] for m in model_args.measures.split(",")],
+                        dim=-1,
+                    )
             else:
                 x = batch["mpm"]
             y = model(x)
@@ -191,13 +197,19 @@ def evaluate():
     with torch.no_grad():
         for batch in val_dl:
             if not training_args.use_mpm:
-                x = torch.cat(
-                    [
-                        batch["measures"][m].unsqueeze(-1)
-                        for m in model_args.measures.split(",")
-                    ],
-                    dim=-1,
-                )
+                if not collator_args.use_cwt:
+                    x = torch.cat(
+                        [
+                            batch["measures"][m].unsqueeze(-1)
+                            for m in model_args.measures.split(",")
+                        ],
+                        dim=-1,
+                    )
+                else:
+                    x = torch.cat(
+                        [batch["measures"][m] for m in model_args.measures.split(",")],
+                        dim=-1,
+                    )
             else:
                 x = batch["mpm"]
             y = model(x)
@@ -298,15 +310,15 @@ def main():
         )
     collator_args.measures = model_args.measures
     model_args.use_mpm = training_args.use_mpm
+    model_args.use_cwt = collator_args.use_cwt
+    model_args.cwt_n_bins = collator_args.cwt_n_bins
     collator_args.overwrite = training_args.overwrite_data
     if training_args.use_mpm:
         collator_args.name = collator_args.name.replace("default", "prosody_model")
         bins = training_args.mpm_bin_size
         mask = training_args.mpm_mask_size
         step = training_args.mpm_checkpoint_step
-        collator_args.mpm = (
-            f"mpm_checkpoints/bin{bins}_mask{mask}/step_{step}"
-        )
+        collator_args.mpm = f"mpm_checkpoints/bin{bins}_mask{mask}/step_{step}"
 
     validate_args(training_args, model_args, collator_args)
 
@@ -338,7 +350,7 @@ def main():
     console_print(f"[green]train[/green]: {len(train_ds)}")
     console_print(f"[green]val[/green]: {len(val_ds)}")
 
-    collator = get_collator(collator_args, device=accelerator.device)
+    collator = get_collator(collator_args)
 
     # dataloader
     if training_args.num_workers is None:
@@ -383,11 +395,11 @@ def main():
         for dl in [train_dl, val_dl]:
             for batch in tqdm(dl, total=len(dl)):
                 if is_first_batch:
-                    if collator_args.name == "default_ravdess":
-                        fig = plot_baseline_batch(batch, collator_args)
-                    elif collator_args.name == "prosody_model_ravdess":
-                        fig = plot_prosody_model_batch(batch, collator_args)
-                    wandb.log({"first_batch": wandb.Image(fig)})
+                    # if collator_args.name == "default_ravdess":
+                    #    fig = plot_baseline_batch(batch, collator_args)
+                    # elif collator_args.name == "prosody_model_ravdess":
+                    #    fig = plot_prosody_model_batch(batch, collator_args)
+                    # wandb.log({"first_batch": wandb.Image(fig)})
                     is_first_batch = False
     collator.args.overwrite = False
 

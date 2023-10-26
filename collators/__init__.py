@@ -13,7 +13,9 @@ from .collators import (
 from configs.args import BURNCollatorArgs, RAVDESSCollatorArgs, TIMITCollatorArgs
 
 
-def get_collator(args: Union[TIMITCollatorArgs, BURNCollatorArgs, RAVDESSCollatorArgs], device = None):
+def get_collator(
+    args: Union[TIMITCollatorArgs, BURNCollatorArgs, RAVDESSCollatorArgs], device=None
+):
     return {
         "default_burn": BaselineBURNCollator,
         "default_ravdess": BaselineRAVDESSCollator,

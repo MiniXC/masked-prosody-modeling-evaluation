@@ -24,7 +24,10 @@ class EmotionClassifier(nn.Module):
 
         if not args.use_mpm:
             self.measures = args.measures.split(",")
-            input_size = len(self.measures)
+            if args.use_cwt:
+                input_size = len(self.measures) * args.cwt_n_bins
+            else:
+                input_size = len(self.measures)
         else:
             input_size = 256
 
@@ -167,7 +170,10 @@ class EmotionClassifier(nn.Module):
     def dummy_input(self):
         torch.manual_seed(0)
         if not self.args.use_mpm:
-            return torch.randn(1, 256, len(self.measures))
+            if self.args.use_cwt:
+                return torch.randn(1, 256, len(self.measures) * self.args.cwt_n_bins)
+            else:
+                return torch.randn(1, 256, len(self.measures))
         else:
             return torch.randn(1, 256, 256)
 
