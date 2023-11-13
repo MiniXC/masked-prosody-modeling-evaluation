@@ -1,4 +1,4 @@
-lr: 1.0e-3
+lr: 5.0e-5
 lr_schedule: "linear_with_warmup"
 lr_warmup_steps: 100
 n_steps: 1000
@@ -8,4 +8,5 @@ wandb_project: "masked-prosody-modeling-v2-eval"
 wandb_mode: "online"
 type: "conformer"
 use_mpm: True
-mpm_layer: 7
+mpm_layer: 5
+dropout: 0.5

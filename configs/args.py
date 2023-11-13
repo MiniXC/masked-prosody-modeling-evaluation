@@ -61,7 +61,7 @@ class BURNCollatorArgs:
     energy_max: float = 0.2
     vad_min: float = 0
     vad_max: float = 1
-    use_algorithmic_features: bool = False
+    use_algorithmic_features: bool = True
     use_cwt: bool = False
     cwt_n_bins: int = 10
 
@@ -80,7 +80,7 @@ class RAVDESSCollatorArgs:
     energy_max: float = 1
     vad_min: float = 0
     vad_max: float = 1
-    use_algorithmic_features: bool = False
+    use_algorithmic_features: bool = True
     use_cwt: bool = False
     cwt_n_bins: int = 10
 
@@ -99,7 +99,7 @@ class TIMITCollatorArgs:
     energy_max: float = 1
     vad_min: float = 0
     vad_max: float = 1
-    use_algorithmic_features: bool = False
+    use_algorithmic_features: bool = True
     use_cwt: bool = False
     cwt_n_bins: int = 10
 

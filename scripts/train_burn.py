@@ -296,8 +296,8 @@ def evaluate():
             "prom_precision": precision_score(y_true_prom, y_pred_prom),
             "prom_recall": recall_score(y_true_prom, y_pred_prom),
             "break_acc": accuracy_score(y_true_break, y_pred_break),
-            "break_f1": f1_score(y_true_break, y_pred_break, average="macro"),
-            "break_f1_binary": f1_score(y_true_break, y_pred_break, average="binary"),
+            "break_f1": f1_score(y_true_break, y_pred_break, average="binary"),
+            "break_f1_binary": f1_score(y_true_break, y_pred_break, average="macro"),
             "break_precision": precision_score(y_true_break, y_pred_break),
             "break_recall": recall_score(y_true_break, y_pred_break),
             "best_prom_threshold": best_prom_threshold,
@@ -390,8 +390,8 @@ def main():
         mask = training_args.mpm_mask_size
         step = training_args.mpm_checkpoint_step
         collator_args.mpm = (
-            "cdminix/masked_prosody_model"
-            # f"masked-prosody-modeling/checkpoints/bin{bins}_mask{mask}/step_{step}"
+            # "cdminix/masked_prosody_model"
+            f"checkpoints/fischer_mpm"
         )
 
     validate_args(training_args, model_args, collator_args)
