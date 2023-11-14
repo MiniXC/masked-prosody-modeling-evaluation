@@ -42,6 +42,7 @@ class TrainingArgs:
     drop_last: bool = False
     overwrite_data: bool = False
     use_mpm: bool = False
+    use_mpm_random: bool = False
     mpm_bin_size: str = "128"
     mpm_mask_size: str = "16"
     mpm_checkpoint_step: int = 10000
@@ -51,6 +52,26 @@ class TrainingArgs:
 class BURNCollatorArgs:
     max_words: int = 256
     name: str = "default_burn"
+    vocex: str = "cdminix/vocex"
+    vocex_fp16: bool = False
+    mpm: str = None
+    mpm_layer: int = -1
+    pitch_min: float = 50
+    pitch_max: float = 300
+    energy_min: float = 0
+    energy_max: float = 0.2
+    vad_min: float = 0
+    vad_max: float = 1
+    use_algorithmic_features: bool = False
+    use_cwt: bool = False
+    cwt_n_bins: int = 10
+
+@dataclass
+class SWBCollatorArgs:
+    max_words: int = 256
+    sample_rate = 16000
+    hop_length = 256
+    name: str = "default_swb"
     vocex: str = "cdminix/vocex"
     vocex_fp16: bool = False
     mpm: str = None

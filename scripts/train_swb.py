@@ -1,6 +1,9 @@
+import numpy as np
 import os
+import pandas as pd
 import sys
 from collections import deque
+from glob import glob
 from pathlib import Path
 
 sys.path.append(".")  # add root of project to path
@@ -11,7 +14,7 @@ from torch.utils.data import DataLoader
 import torchvision
 from accelerate import Accelerator
 from transformers import get_linear_schedule_with_warmup, HfArgumentParser
-from datasets import load_dataset
+from datasets import Dataset, load_dataset
 
 # logging & etc
 from torchinfo import summary
@@ -27,7 +30,7 @@ import matplotlib.pyplot as plt
 console = Console()
 
 # local imports
-from configs.args import TrainingArgs, BURNModelArgs, BURNCollatorArgs as CollatorArgs
+from configs.args import TrainingArgs, BURNModelArgs, SWBCollatorArgs as CollatorArgs
 from configs.validation import validate_args
 from util.remote import wandb_update_config, wandb_init, push_to_hub
 from util.plotting import plot_baseline_burn_batch as plot_baseline_batch
@@ -305,6 +308,60 @@ def evaluate():
         },
     )
 
+def segment_swb_result_df(fp, max_words, sr, hop_length, write_path=None, single_side=True, max_segments=10):
+    """
+    Segment each conversation side based on max_words. Return torch.Dataset rows for both speakers
+    (optionally write the individual jsons).  
+
+    Args
+        max_words (int): max number of words per segment
+        sr (int): sample rate used to generate frame-level timestamps
+        hop_length (int): ""
+        max_segments (int): only split conversations into max_segments
+    """
+    df = pd.read_csv(fp) 
+    df.drop(df.filter(regex="Unname"),axis=1, inplace=True)
+    conv_id = df.phrase_id[0].split('.')[0][:-1]
+    # Get speaker information
+    df['speaker'] = df['phonword_id'].apply(lambda x: 'A' if 'A' in x else 'B') 
+    # Convert word time stamps to frame indices
+    start_frames = (np.array(list(df['start'])) * sr / hop_length).astype(np.int32)
+    end_frames = (np.array(list(df['end'])) * sr / hop_length).astype(np.int32)
+    df['word_frames'] = list(zip(start_frames, end_frames))    
+
+    df_seg_rows = []
+    for speaker in ['A', 'B']:
+        df_speaker = df[df.speaker == speaker].sort_values(by=['phrase_start', 'start'])
+        df_speaker = df_speaker.reset_index()
+        
+        segment_indx = [0]
+        for i in range(max_segments):
+            start_indx = segment_indx[-1]
+            df_seg = df_speaker.loc[start_indx:start_indx+max_words]
+            if df_seg.shape[0] + start_indx == df_speaker.shape[0]: # if conversation has been fully segmented
+                break
+            else: # ensure phrases are segmented at phrase-ends
+                seg_id = df_seg['phrase_end'].idxmax()
+                segment_indx.append(seg_id)
+
+        df_segments = {i : df_speaker.loc[segment_indx[i]:segment_indx[i+1]-1] for i in range(len(segment_indx)-1)}
+        if write_path:
+            for i in range(len(segment_indx)-1):
+                df_speaker_seg = df_speaker.loc[segment_indx[i]:segment_indx[i+1]-1]
+                df_speaker_seg.to_csv(write_path + f'{conv_id}_{speaker}_{i}.csv')
+        else: 
+            df_seg_row = {
+                'speaker': f'{conv_id}_{speaker}', 
+                'words': list(df_seg.phonword),
+                'word_times': list(zip(list(df_seg.start), list(df_seg.end))),
+                'word_frames': list(df_seg.word_frames),
+                'prominence': [l == True for l in list(df_seg.binary_accent)],    
+                'break': [l == True for l in list(df_seg.binary_break)],
+                'audio': f'/disk/scratch/swallbridge/datasets/switchboard1_audio/sw0{conv_id[2:]}.sph',
+            }
+            df_seg_rows.append(df_seg_row)
+
+    return df_seg_rows
 
 def main():
     global accelerator, training_args, model_args, collator_args, train_dl, val_dl, optimizer, scheduler, model, global_step, pbar
@@ -380,10 +437,8 @@ def main():
     collator_args.values_per_word = model_args.values_per_word
     collator_args.measures = model_args.measures
 
-    model_args.use_mpm = training_args.use_mpm
-    model_args.use_mpm_random = training_args.use_mpm_random
+    model_args.use_mpm = training_args.use_mpm # TODO set the arg here to give a model pretrained model link 
     model_args.use_cwt = collator_args.use_cwt
-    model_args.use_mpm_init = training_args.use_mpm
     model_args.cwt_n_bins = collator_args.cwt_n_bins
     collator_args.overwrite = training_args.overwrite_data
     if training_args.use_mpm:
@@ -394,14 +449,6 @@ def main():
         collator_args.mpm = (
             "cdminix/masked_prosody_model"
             # f"masked-prosody-modeling/checkpoints/bin{bins}_mask{mask}/step_{step}"
-        )
-    if training_args.use_mpm_random:
-        collator_args.name = collator_args.name.replace("default", "prosody_model")
-        bins = training_args.mpm_bin_size
-        mask = training_args.mpm_mask_size
-        step = training_args.mpm_checkpoint_step
-        collator_args.mpm = (
-            "random_init"
         )
 
     validate_args(training_args, model_args, collator_args)
@@ -420,19 +467,65 @@ def main():
     # dataset
     console_rule("Dataset")
 
-    console_print(f"[green]dataset[/green]: {training_args.burn_dataset}")
-    console_print(f"[green]train_split[/green]: {training_args.burn_train_split}")
-    console_print(f"[green]val_split[/green]: {training_args.burn_val_split}")
+    # SWB conversations are much longer than BURNC paragraphs, so will be segmented by max_words, breaking at appropriate phrase break locations as labelled in NXT
+    swb_fp = "/disk/scratch/swallbridge/MPM/swbd_nxt/processed_3/word_level_annotations"
+    swb_feat_files = glob(swb_fp + '/*.csv')
+    
+    # max_words = 256 # set in burncollator, hardcode for now
+    # sample_rate = 16000 # TODO where is this set?
+    # hop_length=256
+    # seconds_per_frame = hop_length / sample_rate
 
-    train_ds = load_dataset(
-        training_args.burn_dataset, split=training_args.burn_train_split
-    )
-    val_ds = load_dataset(
-        training_args.burn_dataset, split=training_args.burn_val_split
-    )
+    # Split conv paths into train, val, test splits -- not random es test is not used here!
+    perc = lambda i, t: int((i * t) / 100)
+    tvt_splits = [perc(80, len(swb_feat_files)), perc(90, len(swb_feat_files))]
+    train_fp, val_fp, test_fp = swb_feat_files[:tvt_splits[0]], swb_feat_files[tvt_splits[0]:tvt_splits[1]], swb_feat_files[tvt_splits[1]:]
 
-    import IPython
-    IPython.embed()
+    # Segment each conversation to produce dataframes in the same format as BURNC dataset
+    train_segments = [segment_swb_result_df(
+                            fp, 
+                            sr=collator_args.sample_rate, 
+                            hop_length=collator_args.hop_length, 
+                            max_words=collator_args.max_words
+                                ) for fp in train_fp]
+    val_segments = [segment_swb_result_df(
+                            fp, 
+                            sr=collator_args.sample_rate, 
+                            hop_length=collator_args.hop_length, 
+                            max_words=collator_args.max_words
+                                ) for fp in val_fp]
+    test_segments = [segment_swb_result_df(
+                            fp, 
+                            sr=collator_args.sample_rate, 
+                            hop_length=collator_args.hop_length, 
+                            max_words=collator_args.max_words
+                                ) for fp in test_fp]
+    
+    train_segments = [item for sublist in train_segments for item in sublist]
+    val_segments = [item for sublist in val_segments for item in sublist]
+    test_segments = [item for sublist in test_segments for item in sublist]
+
+    console_print(f"[green]dataset[/green]: {swb_fp}")
+    console_print(f"[green]train_split (conversations, segments)[/green]: {len(train_fp)}, {len(train_segments)}")
+    console_print(f"[green]val_split   (conversations, segments)[/green]: {len(val_fp)}, {len(val_segments)}")
+    
+    # Load them into datasets as dataframes
+    train_ds = Dataset.from_list(train_segments)
+    # train_ds = load_dataset(
+    #     training_args.burn_dataset, split=training_args.burn_train_split
+    # )
+    #     Dataset({
+    #     features: ['speaker', 'words', 'word_durations', 'prominence', 'break', 'audio'],
+    #     num_rows: 365
+    # })
+    val_ds = Dataset.from_list(val_segments)
+    # val_ds = load_dataset(
+    #     training_args.burn_dataset, split=training_args.burn_val_split
+    # )
+    #     Dataset({
+    #     features: ['speaker', 'words', 'word_durations', 'prominence', 'break', 'audio'],
+    #     num_rows: 41
+    # })
 
     console_print(f"[green]train[/green]: {len(train_ds)}")
     console_print(f"[green]val[/green]: {len(val_ds)}")
@@ -473,6 +566,9 @@ def main():
             num_workers=training_args.num_workers,
         )
 
+    import IPython
+    IPython.embed()
+
     if training_args.overwrite_data:
         console_print(f"[yellow]WARNING[/yellow]: overwriting features")
     if accelerator.is_main_process:
@@ -481,12 +577,12 @@ def main():
         for dl in [train_dl, val_dl]:
             for batch in tqdm(dl, total=len(dl)):
                 if is_first_batch:
-                    if collator_args.name == "default_burn":
+                    if collator_args.name == "default_swb":
                         fig = plot_baseline_batch(batch, collator_args)
-                        plt.savefig("figures/first_batch_burn.png")
-                    elif collator_args.name == "prosody_model_burn":
+                        plt.savefig("figures/first_batch_swb.png")
+                    elif collator_args.name == "prosody_model_swb":
                         fig = plot_prosody_model_batch(batch, collator_args)
-                        plt.savefig("figures/first_batch_burn.png")
+                        plt.savefig("figures/first_batch_swb.png")
                     wandb.log({"first_batch": wandb.Image(fig)})
                     is_first_batch = False
     collator.args.overwrite = False

@@ -134,6 +134,8 @@ class MaskedProsodyModel(nn.Module):
         margs = ModelArgs(**fargs)
         margs.bins = args["bins"]
         margs.max_length = args["max_length"]
+        # display(type(margs), margs)
+        # display(f'margs.bins: {margs.bins}')
         model = MaskedProsodyModel(margs)
         model.load_state_dict(torch.load(model_file))
         return model
