@@ -381,7 +381,6 @@ def main():
     collator_args.measures = model_args.measures
 
     model_args.use_mpm = training_args.use_mpm
-    model_args.use_mpm_random = training_args.use_mpm_random
     model_args.use_cwt = collator_args.use_cwt
     model_args.use_mpm_init = training_args.use_mpm
     model_args.cwt_n_bins = collator_args.cwt_n_bins
@@ -392,16 +391,8 @@ def main():
         mask = training_args.mpm_mask_size
         step = training_args.mpm_checkpoint_step
         collator_args.mpm = (
-            # "cdminix/masked_prosody_model"
-            f"checkpoints/fischer_mpm"
-        )
-    if training_args.use_mpm_random:
-        collator_args.name = collator_args.name.replace("default", "prosody_model")
-        bins = training_args.mpm_bin_size
-        mask = training_args.mpm_mask_size
-        step = training_args.mpm_checkpoint_step
-        collator_args.mpm = (
-            "random_init"
+            "cdminix/masked_prosody_model"
+            # f"checkpoints/fischer_mpm"
         )
 
     validate_args(training_args, model_args, collator_args)
@@ -430,9 +421,6 @@ def main():
     val_ds = load_dataset(
         training_args.burn_dataset, split=training_args.burn_val_split
     )
-
-    import IPython
-    IPython.embed()
 
     console_print(f"[green]train[/green]: {len(train_ds)}")
     console_print(f"[green]val[/green]: {len(val_ds)}")

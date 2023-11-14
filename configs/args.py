@@ -42,7 +42,6 @@ class TrainingArgs:
     drop_last: bool = False
     overwrite_data: bool = False
     use_mpm: bool = False
-    use_mpm_random: bool = False
     mpm_bin_size: str = "128"
     mpm_mask_size: str = "16"
     mpm_checkpoint_step: int = 10000
@@ -65,6 +64,7 @@ class BURNCollatorArgs:
     use_algorithmic_features: bool = True
     use_cwt: bool = False
     cwt_n_bins: int = 10
+    use_mpm_random: bool = False
 
 @dataclass
 class SWBCollatorArgs:
@@ -85,6 +85,7 @@ class SWBCollatorArgs:
     use_algorithmic_features: bool = False
     use_cwt: bool = False
     cwt_n_bins: int = 10
+    use_mpm_random: bool = False
 
 
 @dataclass
@@ -104,6 +105,7 @@ class RAVDESSCollatorArgs:
     use_algorithmic_features: bool = True
     use_cwt: bool = False
     cwt_n_bins: int = 10
+    use_mpm_random: bool = False
 
 
 @dataclass
@@ -123,6 +125,7 @@ class TIMITCollatorArgs:
     use_algorithmic_features: bool = True
     use_cwt: bool = False
     cwt_n_bins: int = 10
+    use_mpm_random: bool = False
 
 
 @dataclass

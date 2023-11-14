@@ -9,11 +9,11 @@ import numpy as np
 import librosa
 from vocex import Vocex
 
-# from model.mpm.masked_prosody_model import MaskedProsodyModel
+from model.mpm.masked_prosody_model import MaskedProsodyModel
 
-from model.mpm.masked_prosody_model import (
-    ConversationalMaskedProsodyModel as MaskedProsodyModel,
-)
+# from model.mpm.masked_prosody_model import (
+#     ConversationalMaskedProsodyModel as MaskedProsodyModel,
+# )
 from speech_collator.measures import (
     PitchMeasure,
     EnergyMeasure,
@@ -270,11 +270,10 @@ class ProsodyModelBURNCollator:
 
         self.args = args
         self.vocex = Vocex.from_pretrained(self.args.vocex, fp16=self.args.vocex_fp16)
-        if self.args.mpm == "random_init":
-            import IPython
-            IPython.embed()
-            self.mpm = MaskedProsodyModel.__init__()
         self.mpm = MaskedProsodyModel.from_pretrained(self.args.mpm)
+
+        if self.args.use_mpm_random: # Reset the pretrained model weights to random init
+            self.mpm.apply(self.mpm._init_all_weights)
         self.mpm.args.max_length = 512
         if device is not None:
             self.mpm.to(device)
@@ -402,10 +401,7 @@ class ProsodyModelBURNCollator:
                 )
             else:
                 word_mpms = np.load(file)
-            results.append(word_mpms)
-
-        import IPython
-        IPython.embed()    
+            results.append(word_mpms) 
 
         # pad to max length
         if self.args.max_words is None:
@@ -468,6 +464,8 @@ class ProsodyModelSWBCollator:
         self.args = args
         self.vocex = Vocex.from_pretrained(self.args.vocex, fp16=self.args.vocex_fp16)
         self.mpm = MaskedProsodyModel.from_pretrained(self.args.mpm)
+        if self.args.use_mpm_random: # Reset the pretrained model weights to random init
+            self.mpm.apply(self.mpm._init_all_weights)
         if device is not None:
             self.mpm.to(device)
         self.device = device
@@ -522,10 +520,15 @@ class ProsodyModelSWBCollator:
                         self.args.vad_min,
                         self.args.vad_max,
                     )
+                    # # bucketize
+                    # torch.bucketize(pitch, self.bins) + 2
+                    # torch.bucketize(energy, self.bins) + 2
+                    # torch.bucketize(vad, torch.linspace(0, 1, 2)) + 2
                     # bucketize
-                    torch.bucketize(pitch, self.bins) + 2
-                    torch.bucketize(energy, self.bins) + 2
-                    torch.bucketize(vad, torch.linspace(0, 1, 2)) + 2
+                    pitch = torch.bucketize(pitch, self.bins) + 2
+                    pitch[pitch == self.mpm.args.bins + 2] = self.mpm.args.bins + 1
+                    energy = torch.bucketize(energy, self.bins) + 2
+                    vad = torch.bucketize(vad, torch.linspace(0, 1, 2)) + 2
                     mpm_input = torch.stack(
                         [
                             pitch,
@@ -537,6 +540,7 @@ class ProsodyModelSWBCollator:
                         mpm_input = mpm_input.to(self.device)
 
                     # Slice to max_length, else pad
+                    mpm_input = mpm_input.squeeze(2)
                     mpm_input = mpm_input[:, :, : self.mpm.args.max_length]
                     prev_len = mpm_input.shape[-1]
                     if mpm_input.shape[-1] < self.mpm.args.max_length:
@@ -826,6 +830,8 @@ class ProsodyModelRAVDESSCollator:
             "surprised": 7,
         }
         self.mpm = MaskedProsodyModel.from_pretrained(self.args.mpm)
+        if self.args.use_mpm_random: # Reset the pretrained model weights to random init
+            self.mpm.apply(self.mpm._init_all_weights)
         if device is not None:
             self.mpm.to(device)
         self.device = device
@@ -1181,6 +1187,8 @@ class ProsodyModelTIMITCollator:
         self.args = args
         self.vocex = Vocex.from_pretrained(self.args.vocex, fp16=self.args.vocex_fp16)
         self.mpm = MaskedProsodyModel.from_pretrained(self.args.mpm)
+        if self.args.use_mpm_random: # Reset the pretrained model weights to random init
+            self.mpm.apply(self.mpm._init_all_weights)
         self.bins = torch.linspace(0, 1, self.mpm.args.bins)
         if device is not None:
             self.mpm.to(device)

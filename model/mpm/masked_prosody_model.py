@@ -68,6 +68,12 @@ class MaskedProsodyModel(nn.Module):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        
+    def _init_all_weights(self, module):
+        if hasattr(module, 'weight'):
+            module.weight.data.normal_(mean=0.0, std=0.02)
+        if hasattr(module, 'bias'):
+            module.bias.data.zero_()
 
     def forward(self, x, return_layer=None):
         pitch = x[:, 0]
@@ -134,8 +140,6 @@ class MaskedProsodyModel(nn.Module):
         margs = ModelArgs(**fargs)
         margs.bins = args["bins"]
         margs.max_length = args["max_length"]
-        # display(type(margs), margs)
-        # display(f'margs.bins: {margs.bins}')
         model = MaskedProsodyModel(margs)
         model.load_state_dict(torch.load(model_file))
         return model
@@ -200,6 +204,12 @@ class ConversationalMaskedProsodyModel(nn.Module):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        
+    def _init_all_weights(self, module):
+        if hasattr(module, 'weight'):
+            module.weight.data.normal_(mean=0.0, std=0.02)
+        if hasattr(module, 'bias'):
+            module.bias.data.zero_()
 
     def forward(self, x, condition=None, return_layer=None):
         if condition is None:
