@@ -440,7 +440,8 @@ def main():
         mask = training_args.mpm_mask_size
         step = training_args.mpm_checkpoint_step
         collator_args.mpm = (
-            f"mpm_checkpoints/bin{bins}_mask{mask}/step_{step}"
+            # "cdminix/masked_prosody_model"
+            f"checkpoints/fischer_mpm"
         )
     validate_args(training_args, model_args, collator_args)
 

@@ -85,7 +85,7 @@ class EmotionClassifier(nn.Module):
             #     nn.Linear(args.hidden_dim, 1),
             # )
             self.final_linear = nn.Sequential(
-                nn.Linear(args.hidden_dim * 2, args.hidden_dim),
+                nn.Linear(args.hidden_dim * 4, args.hidden_dim),
                 nn.GELU(),
                 nn.Dropout(args.dropout),
                 nn.Linear(args.hidden_dim, 8),
@@ -115,8 +115,8 @@ class EmotionClassifier(nn.Module):
             )
             return self.final_linear(x)
         elif self.args.type == "conformer":
-            x = self.input_linear(x)
-            x = self.positional_encoding(x)
+            x_input = self.input_linear(x)
+            x = self.positional_encoding(x_input)
             x = self.conformer(x)
             # attn_scores = self.attention(x)
             # attn_scores = torch.softmax(attn_scores, dim=1)
@@ -131,6 +131,8 @@ class EmotionClassifier(nn.Module):
                 [
                     x.mean(dim=1),
                     x.max(dim=1).values,
+                    x_input.mean(dim=1),
+                    x_input.max(dim=1).values,
                 ],
                 dim=-1,
             )

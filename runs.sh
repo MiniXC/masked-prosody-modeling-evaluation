@@ -9,6 +9,10 @@ accelerate launch scripts/train_burn.py configs/conformer.yml --run_name burn_co
 
 python scripts/train_burn.py configs/conformer.yml --run_name ravdess_conformer_raw_algo --use_algorithmic_features --use_cwt --overwrite_data --wandb_mode online
 
+python scripts/train_burn.py configs/mpm_conformer.yml --run_name burn_conformer_mpm --overwrite_data
+python scripts/train_ravdess.py configs/mpm_conformer.yml --run_name ravdess_conformer_mpm --overwrite_data
+python scripts/train_timit.py configs/mpm_conformer.yml --run_name timit_conformer_mpm --overwrite_data
+
 # layer eval
 # accelerate launch scripts/train_burn.py configs/linear.yml --run_name burn_layer_0 --mpm_bin_size 16 --mpm_mask_size 8 --use_mpm --mpm_layer 0 --num_workers 8
 # accelerate launch scripts/train_burn.py configs/linear.yml --run_name burn_layer_1 --mpm_bin_size 16 --mpm_mask_size 8 --use_mpm --mpm_layer 1 --num_workers 8
