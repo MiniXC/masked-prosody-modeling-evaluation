@@ -39,6 +39,9 @@ from model.burn_classifiers import BreakProminenceClassifier
 from collators import get_collator
 
 
+SWB_TEXT_PATH = "/disk/scratch/swallbridge/datasets/swbd_nxt/processed_3/word_level_annotations"
+SWB_AUDIO_PATH = "/disk/scratch/swallbridge/datasets/switchboard1_audio"
+
 def print_and_draw_model():
     dummy_input = model.dummy_input
     # repeat dummy input to match batch size (regardless of how many dimensions)
@@ -357,7 +360,7 @@ def segment_swb_result_df(fp, max_words, sr, hop_length, write_path=None, single
                 'word_frames': list(df_seg.word_frames),
                 'prominence': [l == True for l in list(df_seg.binary_accent)],    
                 'break': [l == True for l in list(df_seg.binary_break)],
-                'audio': f'/disk/scratch/swallbridge/datasets/switchboard1_audio/sw0{conv_id[2:]}.sph',
+                'audio': f'{SWB_AUDIO_PATH}/sw0{conv_id[2:]}.sph',
             }
             df_seg_rows.append(df_seg_row)
 
@@ -468,8 +471,8 @@ def main():
     console_rule("Dataset")
 
     # SWB conversations are much longer than BURNC paragraphs, so will be segmented by max_words, breaking at appropriate phrase break locations as labelled in NXT
-    swb_fp = "/disk/scratch/swallbridge/MPM/swbd_nxt/processed_3/word_level_annotations"
-    swb_feat_files = glob(swb_fp + '/*.csv')
+    SWB_TEXT_PATH = "/disk/scratch/swallbridge/MPM/swbd_nxt/processed_3/word_level_annotations"
+    swb_feat_files = glob(SWB_TEXT_PATH + '/*.csv')
     
     # max_words = 256 # set in burncollator, hardcode for now
     # sample_rate = 16000 # TODO where is this set?
@@ -505,7 +508,7 @@ def main():
     val_segments = [item for sublist in val_segments for item in sublist]
     test_segments = [item for sublist in test_segments for item in sublist]
 
-    console_print(f"[green]dataset[/green]: {swb_fp}")
+    console_print(f"[green]dataset[/green]: {SWB_TEXT_PATH}")
     console_print(f"[green]train_split (conversations, segments)[/green]: {len(train_fp)}, {len(train_segments)}")
     console_print(f"[green]val_split   (conversations, segments)[/green]: {len(val_fp)}, {len(val_segments)}")
     
