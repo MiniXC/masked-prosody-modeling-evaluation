@@ -478,7 +478,7 @@ class ProsodyModelSWBCollator:
     def __call__(self, batch):
         results = []
         batch = {k: [d[k] for d in batch] for k in batch[0]}
-        for k, audio in tqdm(enumerate(batch["audio"]), desc="Processing batch"):
+        for k, audio in enumerate(batch["audio"]): #tqdm(enumerate(batch["audio"]), desc="Processing batch"):
             mpms = []
             audio_path = audio
             file = Path(audio).with_suffix(f".mpm.npy")
@@ -604,11 +604,9 @@ class ProsodyModelSWBCollator:
 
         try:
             batch["mask"] = torch.tensor(mask).bool()
-
             batch["mpm"] = torch.tensor(
                 np.array([np.pad(r, ((0, max_len - r.shape[0]), (0, 0))) for r in results])
             ).to(torch.float32)
-
             # pad prominence and break
             batch["prominence"] = [np.array(p) for p in batch["prominence"]]
             batch["break"] = [np.array(b) for b in batch["break"]]
@@ -629,7 +627,8 @@ class ProsodyModelSWBCollator:
             #         ]
             #     )
             # )
-        except:
+        except Exception as error:
+            print(error)
             import IPython
             IPython.embed()
         return batch
