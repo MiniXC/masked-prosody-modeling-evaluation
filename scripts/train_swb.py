@@ -42,6 +42,25 @@ from collators import get_collator
 SWB_TEXT_PATH = "/disk/scratch/swallbridge/datasets/swbd_nxt/processed_3/word_level_annotations"
 SWB_AUDIO_PATH = "/disk/scratch/swallbridge/datasets/switchboard1_audio"
 
+
+no_results = {
+            "loss": 100000,
+            "break_loss": 100000,
+            "prom_loss": 100000,
+            "prom_acc": 0,
+            "prom_f1": 0,
+            "prom_f1_binary": 0,
+            "prom_precision": 0,
+            "prom_recall": 0,
+            "break_acc": 0,
+            "break_f1": 0,
+            "break_f1_binary": 0,
+            "break_precision": 0,
+            "break_recall": 0,
+            "best_prom_threshold": 0,
+            "best_break_threshold": 0,
+            }
+
 def print_and_draw_model():
     dummy_input = model.dummy_input
     # repeat dummy input to match batch size (regardless of how many dimensions)
@@ -121,12 +140,13 @@ def save_checkpoint():
 
 def train_epoch(epoch):
     global global_step
+    eval_results = no_results
     model.train()
     losses = deque(maxlen=training_args.log_every_n_steps)
     break_losses = deque(maxlen=training_args.log_every_n_steps)
     prom_losses = deque(maxlen=training_args.log_every_n_steps)
     step = 0
-    console_rule(f"Epoch {epoch}")
+    # console_rule(f"Epoch {epoch}")
     last_loss = None
     for batch in train_dl:
         with accelerator.accumulate(model):
@@ -192,14 +212,14 @@ def train_epoch(epoch):
         ):
             save_checkpoint()
         if training_args.n_steps is not None and global_step >= training_args.n_steps:
-            return
+            return eval_results
         if (
             training_args.eval_every_n_steps is not None
             and global_step > 0
             and global_step % training_args.eval_every_n_steps == 0
             and accelerator.is_main_process
         ):
-            evaluate()
+            eval_results = evaluate()
             console_rule(f"Epoch {epoch}")
         step += 1
         global_step += 1
@@ -207,6 +227,7 @@ def train_epoch(epoch):
             pbar.update(1)
             if last_loss is not None:
                 pbar.set_postfix({"loss": f"{last_loss:.3f}"})
+    return eval_results
 
 
 def evaluate():
@@ -218,7 +239,7 @@ def evaluate():
     losses = []
     prom_losses = []
     break_losses = []
-    console_rule("Evaluation")
+    console_rule("Evaluation Start")
     with torch.no_grad():
         for batch in val_dl:
             if not model_args.use_mpm:
@@ -290,9 +311,8 @@ def evaluate():
     y_pred_break = (y_pred_break > best_break_threshold)[percent_10:]
     y_true_prom = y_true_prom[percent_10:]
     y_true_break = y_true_break[percent_10:]
-    wandb_log(
-        "val",
-        {
+
+    eval_results = {
             "loss": torch.mean(torch.tensor(losses)).item(),
             "break_loss": torch.mean(torch.tensor(break_losses)).item(),
             "prom_loss": torch.mean(torch.tensor(prom_losses)).item(),
@@ -308,8 +328,12 @@ def evaluate():
             "break_recall": recall_score(y_true_break, y_pred_break),
             "best_prom_threshold": best_prom_threshold,
             "best_break_threshold": best_break_threshold,
-        },
+            }
+    wandb_log(
+        "val",
+        eval_results,
     )
+    return eval_results
 
 def segment_swb_result_df(fp, max_words, sr, hop_length, write_path=None, single_side=True, max_segments=10):
     """
@@ -336,11 +360,10 @@ def segment_swb_result_df(fp, max_words, sr, hop_length, write_path=None, single
     for speaker in ['A', 'B']:
         df_speaker = df[df.speaker == speaker].sort_values(by=['phrase_start', 'start'])
         df_speaker = df_speaker.reset_index()
-        
         segment_indx = [0]
         for i in range(max_segments):
             start_indx = segment_indx[-1]
-            df_seg = df_speaker.loc[start_indx:start_indx+max_words]
+            df_seg = df_speaker.loc[start_indx:start_indx+max_words-1]
             if df_seg.shape[0] + start_indx == df_speaker.shape[0]: # if conversation has been fully segmented
                 break
             else: # ensure phrases are segmented at phrase-ends
@@ -640,12 +663,26 @@ def main():
     console_print(
         f"[green]effective_batch_size[/green]: {training_args.batch_size*accelerator.num_processes}"
     )
+    
+    best_results = no_results 
+    best_epoch = 0
     pbar = tqdm(total=pbar_total, desc="step")
     for i in range(training_args.n_epochs):
-        train_epoch(i)
-    console_rule("Evaluation")
+        eval_results = train_epoch(i)       
+        # Track best epoch
+        if eval_results["prom_f1"] > best_results["prom_f1"]:
+            best_results = eval_results
+            best_epoch = i
+    console_rule("Evaluation Start")
     seed_everything(training_args.seed)
-    evaluate()
+    last_results = evaluate()
+
+    # log best results and epoch
+    console_rule(f"Best epoch {best_epoch}")
+    wandb_log(
+        "best_val_results",
+        best_results,
+    )
 
     # save final model
     console_rule("Saving")
