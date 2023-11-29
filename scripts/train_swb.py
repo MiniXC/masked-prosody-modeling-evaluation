@@ -40,8 +40,8 @@ from collators import get_collator
 
 
 SWB_TEXT_PATH = "/disk/scratch/swallbridge/datasets/swbd_nxt/processed_3/word_level_annotations"
+# SWB_TEXT_PATH = "/disk/scratch/swallbridge/MPM/swbd_nxt/processed_3/word_level_annotations"
 SWB_AUDIO_PATH = "/disk/scratch/swallbridge/datasets/switchboard1_audio"
-
 
 no_results = {
             "loss": 100000,
@@ -494,7 +494,6 @@ def main():
     console_rule("Dataset")
 
     # SWB conversations are much longer than BURNC paragraphs, so will be segmented by max_words, breaking at appropriate phrase break locations as labelled in NXT
-    SWB_TEXT_PATH = "/disk/scratch/swallbridge/MPM/swbd_nxt/processed_3/word_level_annotations"
     swb_feat_files = glob(SWB_TEXT_PATH + '/*.csv')
     
     # max_words = 256 # set in burncollator, hardcode for now
