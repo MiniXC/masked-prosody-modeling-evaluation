@@ -591,9 +591,6 @@ def main():
             num_workers=training_args.num_workers,
         )
 
-    import IPython
-    IPython.embed()
-
     if training_args.overwrite_data:
         console_print(f"[yellow]WARNING[/yellow]: overwriting features")
     if accelerator.is_main_process:
