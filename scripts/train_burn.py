@@ -559,7 +559,7 @@ def main():
     for i in range(training_args.n_epochs):
         eval_results = train_epoch(i)
         # Track best epoch
-        if eval_results["prom_f1"] > best_results["prom_f1"]:
+        if eval_results["prom_f1_binary"] > best_results["prom_f1_binary"]:
             best_results = eval_results
             best_epoch = i
     console_rule("Evaluation Start")
