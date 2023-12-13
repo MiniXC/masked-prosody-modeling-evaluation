@@ -399,7 +399,7 @@ class ProsodyModelBURNCollator:
                     )
                 word_mpms = torch.stack(word_mpms)
                 np.save(
-                    Path(audio_path).with_suffix(f".mpm.npy"),
+                    Path(audio_path).with_suffix(f".{self.suffix}.npy"),
                     word_mpms,
                 )
             else:
@@ -592,7 +592,7 @@ class ProsodyModelSWBCollator:
                     )
                 word_mpms = torch.stack(word_mpms)
                 np.save(
-                    Path(audio_path).with_suffix(f".mpm.npy"),
+                    Path(audio_path).with_suffix(f".{self.suffix}.npy"),
                     word_mpms,
                 )
             else:
@@ -824,6 +824,7 @@ class ProsodyModelRAVDESSCollator:
         super().__init__()
 
         self.args = args
+        self.suffix = "mpm"
         self.vocex = Vocex.from_pretrained(self.args.vocex, fp16=self.args.vocex_fp16)
         self.emotions2int = {
             "neutral": 0,
@@ -839,6 +840,7 @@ class ProsodyModelRAVDESSCollator:
         if self.args.use_mpm_random: # Reset the pretrained model weights to random init
             print(f"E.g. weights before init:\n{self.mpm.state_dict()['transformer.layers.0.self_attn.out_proj.weight']}")
             self.mpm.apply(self.mpm._init_all_weights)
+            self.suffix = "mpm_rand"
             print(f"Same weights after init:\n{self.mpm.state_dict()['transformer.layers.0.self_attn.out_proj.weight']}")
         if device is not None:
             self.mpm.to(device)
@@ -855,7 +857,7 @@ class ProsodyModelRAVDESSCollator:
         batch = {k: [d[k] for d in batch] for k in batch[0]}
         for k, audio in enumerate(batch["audio"]):
             audio_path = audio["path"]
-            file = Path(audio_path).with_suffix(f".mpm.npy")
+            file = Path(audio_path).with_suffix(f".{self.suffix}.npy")
             if (not file.exists()) or self.args.overwrite:
                 audio, sr = audio["array"], audio["sampling_rate"]
                 if not self.args.use_algorithmic_features:
@@ -925,7 +927,7 @@ class ProsodyModelRAVDESSCollator:
                 out = mpm_output["representations"].detach().cpu()
                 out = out[0, :prev_len, :]
                 np.save(
-                    Path(audio_path).with_suffix(f".mpm.npy"),
+                    Path(audio_path).with_suffix(f".{self.suffix}.npy"),
                     out,
                 )
             else:
@@ -1193,11 +1195,13 @@ class ProsodyModelTIMITCollator:
         super().__init__()
 
         self.args = args
+        self.suffix = "mpm"
         self.vocex = Vocex.from_pretrained(self.args.vocex, fp16=self.args.vocex_fp16)
         self.mpm = MaskedProsodyModel.from_pretrained(self.args.mpm)
         if self.args.use_mpm_random: # Reset the pretrained model weights to random init
             print(f"E.g. weights before init:\n{self.mpm.state_dict()['transformer.layers.0.self_attn.out_proj.weight']}")
             self.mpm.apply(self.mpm._init_all_weights)
+            self.suffix = "mpm_rand"
             print(f"Same weights after init:\n{self.mpm.state_dict()['transformer.layers.0.self_attn.out_proj.weight']}")
         self.bins = torch.linspace(0, 1, self.mpm.args.bins)
         if device is not None:
@@ -1217,7 +1221,7 @@ class ProsodyModelTIMITCollator:
             audio_path = audio["path"]
             measures = {measure: [] for measure in ALL_MEASURES}
             original_len = len(audio["array"])
-            file = Path(audio_path).with_suffix(f".mpm.npy")
+            file = Path(audio_path).with_suffix(f".{self.suffix}.npy")
             if (not file.exists()) or self.args.overwrite:
                 audio, sr = audio["array"], audio["sampling_rate"]
                 if not self.args.use_algorithmic_features:
@@ -1299,7 +1303,7 @@ class ProsodyModelTIMITCollator:
                         dim=0,
                     )
                 np.save(
-                    Path(audio_path).with_suffix(f".mpm.npy"),
+                    Path(audio_path).with_suffix(f".{self.suffix}.npy"),
                     out,
                 )
             else:
