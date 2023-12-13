@@ -269,11 +269,13 @@ class ProsodyModelBURNCollator:
         super().__init__()
 
         self.args = args
+        self.suffix = "mpm"
         self.vocex = Vocex.from_pretrained(self.args.vocex, fp16=self.args.vocex_fp16)
         self.mpm = MaskedProsodyModel.from_pretrained(self.args.mpm)
         if self.args.use_mpm_random: # Reset the pretrained model weights to random init
             print(f"E.g. weights before init:\n{self.mpm.state_dict()['transformer.layers.0.self_attn.out_proj.weight']}")
             self.mpm.apply(self.mpm._init_all_weights)
+            self.suffix = "mpm_rand"
             print(f"Same weights after init:\n{self.mpm.state_dict()['transformer.layers.0.self_attn.out_proj.weight']}")
         self.mpm.args.max_length = 512
         if device is not None:
@@ -292,7 +294,7 @@ class ProsodyModelBURNCollator:
         for k, audio in enumerate(batch["audio"]):
             mpms = []
             audio_path = audio
-            file = Path(audio).with_suffix(f".mpm.npy")
+            file = Path(audio).with_suffix(f".{self.suffix}.npy")
             if (not file.exists()) or self.args.overwrite:
                 file = Path(audio)
                 audio, sr = librosa.load(audio, sr=16000)
@@ -463,11 +465,13 @@ class ProsodyModelSWBCollator:
         super().__init__()
 
         self.args = args
+        self.suffix = 'mpm'
         self.vocex = Vocex.from_pretrained(self.args.vocex, fp16=self.args.vocex_fp16)
         self.mpm = MaskedProsodyModel.from_pretrained(self.args.mpm)
         if self.args.use_mpm_random: # Reset the pretrained model weights to random init
             print(f"E.g. weights before init:\n{self.mpm.state_dict()['transformer.layers.0.self_attn.out_proj.weight']}")
             self.mpm.apply(self.mpm._init_all_weights)
+            self.suffix = 'mpm_rand'
             print(f"Same weights after init:\n{self.mpm.state_dict()['transformer.layers.0.self_attn.out_proj.weight']}")
         if device is not None:
             self.mpm.to(device)
@@ -484,7 +488,7 @@ class ProsodyModelSWBCollator:
         for k, audio in enumerate(batch["audio"]): #tqdm(enumerate(batch["audio"]), desc="Processing batch"):
             mpms = []
             audio_path = audio
-            file = Path(audio).with_suffix(f".mpm.npy")
+            file = Path(audio).with_suffix(f".{self.suffix}.npy")
             if (not file.exists()) or self.args.overwrite:
                 file = Path(audio)
                 audio, sr = librosa.load(audio, sr=16000)
