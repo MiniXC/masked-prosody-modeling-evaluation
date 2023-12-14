@@ -39,9 +39,9 @@ from model.burn_classifiers import BreakProminenceClassifier
 from collators import get_collator
 
 
-SWB_TEXT_PATH = "/disk/scratch/swallbridge/datasets/swbd_nxt/processed_3/word_level_annotations"
+SWB_TEXT_PATH = "/disk/scratch1/swallbridge/datasets/swbd_nxt/processed_3/word_level_annotations"
 # SWB_TEXT_PATH = "/disk/scratch/swallbridge/MPM/swbd_nxt/processed_3/word_level_annotations"
-SWB_AUDIO_PATH = "/disk/scratch/swallbridge/datasets/switchboard1_audio"
+SWB_AUDIO_PATH = "/disk/scratch1/swallbridge/datasets/switchboard1_audio"
 
 no_results = {
             "loss": 100000,
@@ -647,8 +647,8 @@ def main():
     if training_args.eval_only:
         console_rule("Evaluation")
         seed_everything(training_args.seed)
-        evaluate()
-        return
+        eval_results = evaluate()
+        return eval_results
 
     # training
     console_rule("Training")
@@ -692,6 +692,46 @@ def main():
             f"use \n[magenta]wandb sync {Path(wandb.run.dir).parent}[/magenta]\nto sync offline run"
         )
 
+    
+    return best_epoch, best_results
 
 if __name__ == "__main__":
-    main()
+    # best_epoch, best_result = main()
+
+    # [WIP] couldn't get a bash script/subprocess to run this so quick fix...
+    from datetime import datetime
+    import pandas as pd
+    import numpy as np
+
+    runs=3
+
+    # Collect runs
+    best_epochs = {}
+    best_results = {}
+    for i in range(runs):
+        best_epoch, best_result = main()
+        best_epochs[i] = best_epoch
+        best_results[i] = best_result
+
+    # Make writable results
+    res_df = pd.DataFrame(best_results).T
+    res_df["best_epoch"] = best_epochs.values()
+    res_df.loc['mean'] = res_df.mean()
+    res_df.loc['std'] = res_df.std()
+    print(res_df.mean())
+
+    # Make save file (so janky, didn't want to change the argparsing structure too much though) 
+    if collator_args.use_mpm_random:
+        model_name = 'MPMrandom'
+    elif collator_args.use_cwt:
+        model_name = 'CWT'
+    else:
+        model_name = 'MPM'
+    if 'linear' in sys.argv[1]:
+        classifier_name='linear'
+    else:
+        classifier_name='conformer'
+    
+    current_datetime = datetime.now().strftime("%Y%m%d_%H%M")
+    filename = f"results/swb/{classifier_name}_{model_name}_{current_datetime}.json"
+    res_df.to_json(filename)
