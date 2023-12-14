@@ -39,6 +39,22 @@ from util.plotting import plot_prosody_model_timit_batch as plot_prosody_batch
 from model.timit_classifiers import PhonemeWordBoundaryClassifier
 from collators import get_collator
 
+no_results = {
+        "loss": 100000,
+        "phon_loss": 100000,
+        "word_loss": 100000,
+        "phon_f1": 0,
+        "phon_precision": 0,
+        "phon_recall": 0,
+        "phon_accuracy": 0,
+        "word_f1": 0,
+        "word_precision": 0,
+        "word_recall": 0,
+        "word_accuracy": 0,
+        "phon_threshold": 0,
+        "word_threshold": 0,
+                }
+
 
 def print_and_draw_model():
     dummy_input = model.dummy_input
@@ -119,12 +135,13 @@ def save_checkpoint():
 
 def train_epoch(epoch):
     global global_step
+    eval_results = no_results
     model.train()
     losses = deque(maxlen=training_args.log_every_n_steps)
     phon_losses = deque(maxlen=training_args.log_every_n_steps)
     word_losses = deque(maxlen=training_args.log_every_n_steps)
     step = 0
-    console_rule(f"Epoch {epoch}")
+    # console_rule(f"Epoch {epoch}")
     last_loss = None
     for batch in train_dl:
         with accelerator.accumulate(model):
@@ -188,7 +205,7 @@ def train_epoch(epoch):
         ):
             save_checkpoint()
         if training_args.n_steps is not None and global_step >= training_args.n_steps:
-            return
+            return eval_results
         if (
             training_args.eval_every_n_steps is not None
             and global_step > 0
@@ -196,7 +213,7 @@ def train_epoch(epoch):
             and accelerator.is_main_process
         ):
             if training_args.do_full_eval:
-                evaluate()
+                eval_results = evaluate()
             else:
                 evaluate_loss_only()
             console_rule(f"Epoch {epoch}")
@@ -206,6 +223,7 @@ def train_epoch(epoch):
             pbar.update(1)
             if last_loss is not None:
                 pbar.set_postfix({"loss": f"{last_loss:.3f}"})
+    return eval_results
 
 
 def evaluate():
@@ -217,7 +235,7 @@ def evaluate():
     losses = []
     phon_losses = []
     word_losses = []
-    console_rule("Evaluation")
+    console_rule("Evaluation Start")
     with torch.no_grad():
         for batch in val_dl:
             if not training_args.use_mpm:
@@ -286,9 +304,8 @@ def evaluate():
     y_true_word = y_true_word[percent_10:]
     console_print(f"[green]pct. positive phoneme[/green]: {y_true_phon.mean():.3f}")
     console_print(f"[green]pct. positive word[/green]: {y_true_word.mean():.3f}")
-    wandb_log(
-        "val",
-        {
+
+    eval_results = {
             "loss": torch.mean(torch.tensor(losses)).item(),
             "phon_loss": torch.mean(torch.tensor(phon_losses)).item(),
             "word_loss": torch.mean(torch.tensor(word_losses)).item(),
@@ -302,8 +319,13 @@ def evaluate():
             "word_accuracy": accuracy_score(y_true_word, y_pred_word),
             "phon_threshold": best_phon_threshold,
             "word_threshold": best_word_threshold,
-        },
-    )
+                    }
+    wandb_log(
+        "val",
+        eval_results,
+        )
+
+    return eval_results
 
 
 def evaluate_loss_only():
@@ -354,8 +376,8 @@ def evaluate_loss_only():
         "val",
         {
             "loss": torch.mean(torch.tensor(losses)).item(),
-            "break_loss": torch.mean(torch.tensor(phon_losses)).item(),
-            "prom_loss": torch.mean(torch.tensor(word_losses)).item(),
+            "phon_loss": torch.mean(torch.tensor(phon_losses)).item(),
+            "word_loss": torch.mean(torch.tensor(word_losses)).item(),
         },
     )
 
@@ -440,8 +462,8 @@ def main():
         mask = training_args.mpm_mask_size
         step = training_args.mpm_checkpoint_step
         collator_args.mpm = (
-            # "cdminix/masked_prosody_model"
-            f"checkpoints/fischer_mpm"
+            "cdminix/masked_prosody_model"
+            # f"checkpoints/fischer_mpm"
         )
     validate_args(training_args, model_args, collator_args)
 
@@ -567,8 +589,8 @@ def main():
     if training_args.eval_only:
         console_rule("Evaluation")
         seed_everything(training_args.seed)
-        evaluate()
-        return
+        eval_results = evaluate()
+        return eval_results
 
     # training
     console_rule("Training")
@@ -579,12 +601,26 @@ def main():
     console_print(
         f"[green]effective_batch_size[/green]: {training_args.batch_size*accelerator.num_processes}"
     )
+    # Track results
+    best_results = no_results 
+    best_epoch = 0
     pbar = tqdm(total=pbar_total, desc="step")
     for i in range(training_args.n_epochs):
-        train_epoch(i)
-    console_rule("Evaluation")
+        eval_results = train_epoch(i) 
+        # Track best epoch
+        if eval_results["phon_f1"] > best_results["phon_f1"]:
+            best_results = eval_results
+            best_epoch = i
+    console_rule("Evaluation Start")
     seed_everything(training_args.seed)
-    evaluate()
+    last_results = evaluate()
+
+    # log best results and epoch
+    console_rule(f"Best epoch {best_epoch}")
+    wandb_log(
+        "best_val_results",
+        best_results,
+    )
 
     # save final model
     console_rule("Saving")
@@ -598,6 +634,45 @@ def main():
             f"use \n[magenta]wandb sync {Path(wandb.run.dir).parent}[/magenta]\nto sync offline run"
         )
 
+    return best_epoch, best_results
 
 if __name__ == "__main__":
-    main()
+    # best_epoch, best_result = main()
+
+    # [WIP] couldn't get a bash script/subprocess to run this so quick fix...
+    from datetime import datetime
+    import pandas as pd
+    import numpy as np
+
+    runs=3
+
+    # Collect runs
+    best_epochs = {}
+    best_results = {}
+    for i in range(runs):
+        best_epoch, best_result = main()
+        best_epochs[i] = best_epoch
+        best_results[i] = best_result
+
+    # Make writable results
+    res_df = pd.DataFrame(best_results).T
+    res_df["best_epoch"] = best_epochs.values()
+    res_df.loc['mean'] = res_df.mean()
+    res_df.loc['std'] = res_df.std()
+    print(res_df.mean())
+
+    # Make save file (so janky, didn't want to change the argparsing structure too much though) 
+    if collator_args.use_mpm_random:
+        model_name = 'MPMrandom'
+    elif collator_args.use_cwt:
+        model_name = 'CWT'
+    else:
+        model_name = 'MPM'
+    if 'linear' in sys.argv[1]:
+        classifier_name='linear'
+    else:
+        classifier_name='conformer'
+    
+    current_datetime = datetime.now().strftime("%Y%m%d_%H%M")
+    filename = f"results/timit/{classifier_name}_{model_name}_{current_datetime}.json"
+    res_df.to_json(filename)
