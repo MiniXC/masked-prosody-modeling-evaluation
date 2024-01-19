@@ -265,6 +265,14 @@ class ProsodyModelBURNCollator:
         - energy
         - duration
         - voice activity
+
+        Audio files are split into (batches of) 6s of acoustic features (from audio sampled at 22050Hz, using hop lengths of 256) that have been bucketized and stacked 
+            mpm_input = torch.stack([pitch, energy, vad, ])
+
+        256 frames in a feature window / 22050Hz ~= 0.012seconds per feature window
+        22050 / 256 ~= 86 frames per s (frame rate of acoustic features)
+
+        MPM produces representations at the same sample rate (for each audio file (6s in 512 feat_windows), mpm produces an array of [512, 256] (len, hidden_dim). These features are split into words units using the frame computations from the dataset itself (`bu_radio`). Here, word timestamps are converted into the same sample rate as the representations being split — in this case,  (256/22050) seconds per frame, or (22050 / 256) frames per second. 
         """
         super().__init__()
 
@@ -313,9 +321,7 @@ class ProsodyModelBURNCollator:
                         w = librosa.resample(w, orig_sr=sr, target_sr=22050)
                         pitch = self.pitch_measure(w, np.array([1000]))["measure"]
                         energy = self.energy_measure(w, np.array([1000]))["measure"]
-                        vad = self.voice_activity_measure(w, np.array([1000]))[
-                            "measure"
-                        ]
+                        vad = self.voice_activity_measure(w, np.array([1000]))["measure"]
                     # normalize using pitch_min, pitch_max, energy_min, energy_max, vad_min, vad_max
                     if not isinstance(pitch, torch.Tensor):
                         pitch = torch.tensor(pitch)
@@ -478,9 +484,14 @@ class ProsodyModelSWBCollator:
         self.device = device
         self.bins = torch.linspace(0, 1, self.mpm.args.bins)
         if args.use_algorithmic_features:
-            self.pitch_measure = PitchMeasure()
-            self.energy_measure = EnergyMeasure()
-            self.voice_activity_measure = VoiceActivityMeasure()
+            self.pitch_measure = PitchMeasure(
+                sampling_rate = self.args.feature_sample_rate, 
+                hop_length=self.args.hop_length)
+            self.energy_measure = EnergyMeasure(
+                hop_length=self.args.hop_length)
+            self.voice_activity_measure = VoiceActivityMeasure(
+                sampling_rate = self.args.feature_sample_rate, 
+                hop_length=self.args.hop_length)
 
     def __call__(self, batch):
         results = []
@@ -491,11 +502,14 @@ class ProsodyModelSWBCollator:
             file = Path(audio).with_suffix(f".{self.suffix}.npy")
             if (not file.exists()) or self.args.overwrite:
                 file = Path(audio)
-                audio, sr = librosa.load(audio, sr=16000)
-                # create 6 second windows
+                audio, sr = librosa.load(audio, sr=self.args.audio_sample_rate)
+                # create 6 second windows (NB 6 seconds results in last few frames being cut off by max len after upsampling; window size is based on number of samples required to get 512 from the acoustic features and make sure no samples (except last) are padded going into MPM)
                 windows = []
-                for i in range(0, len(audio), 96000):
-                    windows.append(audio[i : i + 96000])
+                window_frames = int(
+                    ((self.mpm.args.max_length * self.args.hop_length) / self.args.feature_sample_rate) * self.args.audio_sample_rate
+                    )
+                for i in range(0, len(audio), window_frames):
+                    windows.append(audio[i : i + window_frames])
                 # Get audio features of entire audio (computed per window)
                 for i, w in enumerate(windows):
                     if not self.args.use_algorithmic_features:
@@ -504,8 +518,8 @@ class ProsodyModelSWBCollator:
                         energy = vocex_output["measures"]["energy"]
                         vad = vocex_output["measures"]["voice_activity_binary"]
                     else:
-                        # resample w to 22050 # TODO ??? 
-                        w = librosa.resample(w, orig_sr=sr, target_sr=22050)
+                        # resample w to 22050; NB this changes the sample rate of features!! # TODO why do we do this? 
+                        w = librosa.resample(w, orig_sr=self.args.audio_sample_rate, target_sr=self.args.feature_sample_rate)
                         pitch = self.pitch_measure(w, np.array([1000]))["measure"]
                         energy = self.energy_measure(w, np.array([1000]))["measure"]
                         vad = self.voice_activity_measure(w, np.array([1000]))[
@@ -514,16 +528,19 @@ class ProsodyModelSWBCollator:
                     # normalize using pitch_min, pitch_max, energy_min, energy_max, vad_min, vad_max
                     pitch = torch.clip(
                         torch.tensor(pitch).unsqueeze(0),
+                        # pitch.clone().detach().unsqueeze(0),
                         self.args.pitch_min,
                         self.args.pitch_max,
                     ) / (self.args.pitch_max - self.args.pitch_min)
                     energy = torch.clip(
                         torch.tensor(energy).unsqueeze(0),
+                        # energy.clone().detach().unsqueeze(0),
                         self.args.energy_min,
                         self.args.energy_max,
                     ) / (self.args.energy_max - self.args.energy_min)
                     vad = torch.clip(
                         torch.tensor(vad).unsqueeze(0),
+                        # vad.clone().detach().unsqueeze(0),
                         self.args.vad_min,
                         self.args.vad_max,
                     )
@@ -581,15 +598,20 @@ class ProsodyModelSWBCollator:
                 word_mpms = []
                 durations = batch["word_frames"][k]
                 for i in range(len(durations) - 1):
-                    # mean-max pool over the word
-                    word_mpms.append(
-                        torch.concat(
-                            [
-                                mpms[durations[i][0] : durations[i][1]].mean(0),
-                                mpms[durations[i][0] : durations[i][1]].max(0).values,
-                            ]
+                    try:
+                        # mean-max pool over the word
+                        word_mpms.append(
+                            torch.concat(
+                                [
+                                    mpms[durations[i][0] : durations[i][1]].mean(0),
+                                    mpms[durations[i][0] : durations[i][1]].max(0).values,
+                                ]
+                            )
                         )
-                    )
+                    except Exception as error:
+                        print(error)
+                        import IPython
+                        IPython.embed()
                 word_mpms = torch.stack(word_mpms)
                 np.save(
                     Path(audio_path).with_suffix(f".{self.suffix}.npy"),

@@ -509,19 +509,19 @@ def main():
     # Segment each conversation to produce dataframes in the same format as BURNC dataset
     train_segments = [segment_swb_result_df(
                             fp, 
-                            sr=collator_args.sample_rate, 
+                            sr=collator_args.feature_sample_rate, 
                             hop_length=collator_args.hop_length, 
                             max_words=collator_args.max_words
                                 ) for fp in train_fp]
     val_segments = [segment_swb_result_df(
                             fp, 
-                            sr=collator_args.sample_rate, 
+                            sr=collator_args.feature_sample_rate, 
                             hop_length=collator_args.hop_length, 
                             max_words=collator_args.max_words
                                 ) for fp in val_fp]
     test_segments = [segment_swb_result_df(
                             fp, 
-                            sr=collator_args.sample_rate, 
+                            sr=collator_args.feature_sample_rate, 
                             hop_length=collator_args.hop_length, 
                             max_words=collator_args.max_words
                                 ) for fp in test_fp]
@@ -666,7 +666,7 @@ def main():
     for i in range(training_args.n_epochs):
         eval_results = train_epoch(i)       
         # Track best epoch
-        if eval_results["prom_f1"] > best_results["prom_f1"]:
+        if eval_results["prom_f1_binary"] > best_results["prom_f1_binary"]:
             best_results = eval_results
             best_epoch = i
     console_rule("Evaluation Start")
@@ -725,8 +725,10 @@ if __name__ == "__main__":
         model_name = 'MPMrandom'
     elif collator_args.use_cwt:
         model_name = 'CWT'
-    else:
+    elif collator_args.mpm:
         model_name = 'MPM'
+    else:
+        model_name = 'inputfeatures'
     if 'linear' in sys.argv[1]:
         classifier_name='linear'
     else:

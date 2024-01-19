@@ -69,7 +69,8 @@ class BURNCollatorArgs:
 @dataclass
 class SWBCollatorArgs:
     max_words: int = 256
-    sample_rate = 16000
+    audio_sample_rate = 8000
+    feature_sample_rate = 22050 # acoustic features are obtained from audio that has been resampled, so use this sample rate for word segmentation
     hop_length = 256
     name: str = "default_swb"
     vocex: str = "cdminix/vocex"
@@ -82,7 +83,7 @@ class SWBCollatorArgs:
     energy_max: float = 0.2
     vad_min: float = 0
     vad_max: float = 1
-    use_algorithmic_features: bool = False
+    use_algorithmic_features: bool = True
     use_cwt: bool = False
     cwt_n_bins: int = 10
     use_mpm_random: bool = False
