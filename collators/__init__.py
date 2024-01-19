@@ -6,6 +6,7 @@ from .collators import (
     BaselineBURNCollator,
     BaselineRAVDESSCollator,
     BaselineTIMITCollator,
+    BaselineSWBCollator,
     ProsodyModelBURNCollator,
     ProsodyModelRAVDESSCollator,
     ProsodyModelTIMITCollator,
@@ -20,7 +21,7 @@ def get_collator(
     return {
         "default_burn": BaselineBURNCollator,
         "default_ravdess": BaselineRAVDESSCollator,
-        # "default_swb": BaselineSWBCollator,
+        "default_swb": BaselineSWBCollator,
         "default_timit": BaselineTIMITCollator,
         "prosody_model_burn": ProsodyModelBURNCollator,
         "prosody_model_ravdess": ProsodyModelRAVDESSCollator,
