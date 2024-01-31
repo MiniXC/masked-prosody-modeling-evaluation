@@ -57,6 +57,10 @@ class BaselineBURNCollator:
             self.pitch_measure = PitchMeasure()
             self.energy_measure = EnergyMeasure()
             self.voice_activity_measure = VoiceActivityMeasure()
+        self.suffix = "input"
+        if self.args.use_cwt:
+            self.suffix = "cwt"
+        print(f"SUFFIX: {self.suffix}")
 
     def __call__(self, batch):
         results = {measure: [] for measure in self.args.measures.split(",")}
@@ -66,7 +70,7 @@ class BaselineBURNCollator:
             measures = {measure: [] for measure in ALL_MEASURES}
             audio_path = audio
             for measure in ALL_MEASURES:
-                file = Path(audio).with_suffix(f".{measure}.npy")
+                file = Path(audio).with_suffix(f".{self.suffix}_{measure}.npy")
                 if file.exists() and not self.args.overwrite:
                     measures[measure] = np.load(file)
             if (not file.exists()) or self.args.overwrite:
@@ -110,6 +114,7 @@ class BaselineBURNCollator:
                     for measure in ALL_MEASURES:
                         measures[measure].append(vocex_output["measures"][measure])
                 for m, v in measures.items():
+                    # Input features
                     if not self.args.use_cwt:
                         v = [v.flatten() for v in v]
                         v = np.concatenate(v)
@@ -135,6 +140,7 @@ class BaselineBURNCollator:
                                 v = np.clip(v, self.args.vad_min, self.args.vad_max) / (
                                     self.args.vad_max - self.args.vad_min
                                 )
+                    # CWT has already been processed
                     else:
                         v = [v.numpy() for v in v]
                         v = np.concatenate(v)
@@ -196,7 +202,7 @@ class BaselineBURNCollator:
                         measures[measure].shape[0], -1
                     )
                     np.save(
-                        Path(audio_path).with_suffix(f".{measure}.npy"),
+                        Path(audio_path).with_suffix(f".{self.suffix}_{measure}.npy"),
                         measures[measure],
                     )
             for measure in results:
@@ -278,12 +284,14 @@ class ProsodyModelBURNCollator:
 
         self.args = args
         self.suffix = "mpm"
+        print(f"SUFFIX = {self.suffix}")
         self.vocex = Vocex.from_pretrained(self.args.vocex, fp16=self.args.vocex_fp16)
         self.mpm = MaskedProsodyModel.from_pretrained(self.args.mpm)
         if self.args.use_mpm_random: # Reset the pretrained model weights to random init
             print(f"E.g. weights before init:\n{self.mpm.state_dict()['transformer.layers.0.self_attn.out_proj.weight']}")
             self.mpm.apply(self.mpm._init_all_weights)
             self.suffix = "mpm_rand"
+            print(f"SUFFIX = {self.suffix}")
             print(f"Same weights after init:\n{self.mpm.state_dict()['transformer.layers.0.self_attn.out_proj.weight']}")
         self.mpm.args.max_length = 512
         if device is not None:
@@ -469,10 +477,12 @@ class BaselineSWBCollator:
         """
         super().__init__()
 
-        self.suffix = 'base'
+        self.suffix = 'input'
+        print(f"SUFFIX = {self.suffix}")
         self.args = args
         if args.use_cwt:
             self.suffix = 'cwt'
+            print(f"SUFFIX = {self.suffix}")
         # if args.use_algorithmic_features:
         self.pitch_measure = PitchMeasure(
             sampling_rate = self.args.feature_sample_rate, 
@@ -492,7 +502,7 @@ class BaselineSWBCollator:
             measures = {measure: [] for measure in ALL_MEASURES}
             audio_path = audio
             for measure in ALL_MEASURES:
-                file = Path(audio).with_suffix(f".{measure}_{self.suffix}.npy")
+                file = Path(audio).with_suffix(f".{self.suffix}_{measure}.npy")
                 if file.exists() and not self.args.overwrite:
                     measures[measure] = np.load(file)
             if (not file.exists()) or self.args.overwrite:
@@ -625,7 +635,7 @@ class BaselineSWBCollator:
                         measures[measure].shape[0], -1
                     )
                     np.save(
-                        Path(audio_path).with_suffix(f".{measure}_{self.suffix}.npy"),
+                        Path(audio_path).with_suffix(f".{self.suffix}_{measure}.npy"),
                         measures[measure],
                     )
 
@@ -702,12 +712,14 @@ class ProsodyModelSWBCollator:
 
         self.args = args
         self.suffix = 'mpm'
+        print(f"SUFFIX = {self.suffix}")
         self.vocex = Vocex.from_pretrained(self.args.vocex, fp16=self.args.vocex_fp16)
         self.mpm = MaskedProsodyModel.from_pretrained(self.args.mpm)
         if self.args.use_mpm_random: # Reset the pretrained model weights to random init
             print(f"E.g. weights before init:\n{self.mpm.state_dict()['transformer.layers.0.self_attn.out_proj.weight']}")
             self.mpm.apply(self.mpm._init_all_weights)
             self.suffix = 'mpm_rand'
+            print(f"SUFFIX = {self.suffix}")
             print(f"Same weights after init:\n{self.mpm.state_dict()['transformer.layers.0.self_attn.out_proj.weight']}")
         if device is not None:
             self.mpm.to(device)
@@ -795,6 +807,10 @@ class ProsodyModelSWBCollator:
 
                     # Slice to max_length, else pad
                     mpm_input = mpm_input.squeeze(2)
+                    if mpm_input.shape[-1] > self.mpm.args.max_length:
+                        print("features are being cut!!")
+                        import IPython
+                        IPython.embed()
                     mpm_input = mpm_input[:, :, : self.mpm.args.max_length]
                     prev_len = mpm_input.shape[-1]
                     if mpm_input.shape[-1] < self.mpm.args.max_length:
@@ -925,6 +941,10 @@ class BaselineRAVDESSCollator:
             self.pitch_measure = PitchMeasure()
             self.energy_measure = EnergyMeasure()
             self.voice_activity_measure = VoiceActivityMeasure()
+        self.suffix = "input"
+        if self.args.use_cwt:
+            self.suffix = "cwt"
+        print(f"SUFFIX: {self.suffix}")
 
     def __call__(self, batch):
         results = {measure: [] for measure in self.args.measures.split(",")}
@@ -934,7 +954,7 @@ class BaselineRAVDESSCollator:
             audio_path = audio["path"]
             measures = {measure: [] for measure in ALL_MEASURES}
             for measure in ALL_MEASURES:
-                file = Path(audio_path).with_suffix(f".{measure}.npy")
+                file = Path(audio_path).with_suffix(f".{self.suffix}_{measure}.npy")
                 if file.exists() and not self.args.overwrite:
                     measures[measure] = np.load(file)
             if (not file.exists()) or self.args.overwrite:
@@ -994,7 +1014,7 @@ class BaselineRAVDESSCollator:
                     measures[measure] = v
 
                     np.save(
-                        Path(audio_path).with_suffix(f".{measure}.npy"),
+                        Path(audio_path).with_suffix(f".{self.suffix}_{measure}.npy"),
                         v,
                     )
             for measure in results:
@@ -1077,6 +1097,7 @@ class ProsodyModelRAVDESSCollator:
 
         self.args = args
         self.suffix = "mpm"
+        print(f"SUFFIX = {self.suffix}")
         self.vocex = Vocex.from_pretrained(self.args.vocex, fp16=self.args.vocex_fp16)
         self.emotions2int = {
             "neutral": 0,
@@ -1093,6 +1114,7 @@ class ProsodyModelRAVDESSCollator:
             print(f"E.g. weights before init:\n{self.mpm.state_dict()['transformer.layers.0.self_attn.out_proj.weight']}")
             self.mpm.apply(self.mpm._init_all_weights)
             self.suffix = "mpm_rand"
+            print(f"SUFFIX = {self.suffix}")
             print(f"Same weights after init:\n{self.mpm.state_dict()['transformer.layers.0.self_attn.out_proj.weight']}")
         if device is not None:
             self.mpm.to(device)
@@ -1233,6 +1255,10 @@ class BaselineTIMITCollator:
             self.pitch_measure = PitchMeasure()
             self.energy_measure = EnergyMeasure()
             self.voice_activity_measure = VoiceActivityMeasure()
+        self.suffix = "input"
+        if self.args.use_cwt:
+            self.suffix = "cwt"
+        print(f"SUFFIX: {self.suffix}")
 
     def __call__(self, batch):
         batch = {k: [d[k] for d in batch] for k in batch[0]}
@@ -1244,7 +1270,7 @@ class BaselineTIMITCollator:
             measures = {measure: [] for measure in ALL_MEASURES}
             original_len = len(audio["array"])
             for measure in ALL_MEASURES:
-                file = Path(audio_path).with_suffix(f".{measure}.npy")
+                file = Path(audio_path).with_suffix(f".{self.suffix}_{measure}.npy")
                 if file.exists() and not self.args.overwrite:
                     measures[measure] = np.load(file)
                     vocex_len = len(measures[measure])
@@ -1306,7 +1332,7 @@ class BaselineTIMITCollator:
                     measures[measure] = v
 
                     np.save(
-                        Path(audio_path).with_suffix(f".{measure}.npy"),
+                        Path(audio_path).with_suffix(f".{self.suffix}_{measure}.npy"),
                         v,
                     )
             for measure in results:
@@ -1406,7 +1432,7 @@ class BaselineTIMITCollator:
 
         # pad measures
         for measure in results:
-            print([r.shape for r in batch["measures"][measure]])
+            # print([r.shape for r in batch["measures"][measure]])
             batch["measures"][measure] = torch.tensor(
                 np.array(
                     [
@@ -1448,12 +1474,14 @@ class ProsodyModelTIMITCollator:
 
         self.args = args
         self.suffix = "mpm"
+        print(f"SUFFIX = {self.suffix}")
         self.vocex = Vocex.from_pretrained(self.args.vocex, fp16=self.args.vocex_fp16)
         self.mpm = MaskedProsodyModel.from_pretrained(self.args.mpm)
         if self.args.use_mpm_random: # Reset the pretrained model weights to random init
             print(f"E.g. weights before init:\n{self.mpm.state_dict()['transformer.layers.0.self_attn.out_proj.weight']}")
             self.mpm.apply(self.mpm._init_all_weights)
             self.suffix = "mpm_rand"
+            print(f"SUFFIX = {self.suffix}")
             print(f"Same weights after init:\n{self.mpm.state_dict()['transformer.layers.0.self_attn.out_proj.weight']}")
         self.bins = torch.linspace(0, 1, self.mpm.args.bins)
         if device is not None:
