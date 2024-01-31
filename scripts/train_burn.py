@@ -617,8 +617,10 @@ if __name__ == "__main__":
         model_name = 'MPMrandom'
     elif collator_args.use_cwt:
         model_name = 'CWT'
-    else:
+    elif collator_args.mpm:
         model_name = 'MPM'
+    else:
+        model_name = 'inputfeatures'
     if 'linear' in sys.argv[1]:
         classifier_name='linear'
     else:
@@ -626,10 +628,5 @@ if __name__ == "__main__":
     
     current_datetime = datetime.now().strftime("%Y%m%d_%H%M")
     filename = f"results/burn/{classifier_name}_{model_name}_{current_datetime}.json"
+    print(f"Saving to: {filename}")
     res_df.to_json(filename)
-    
-
-
-    
-
-

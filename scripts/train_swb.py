@@ -736,4 +736,5 @@ if __name__ == "__main__":
     
     current_datetime = datetime.now().strftime("%Y%m%d_%H%M")
     filename = f"results/swb/{classifier_name}_{model_name}_{current_datetime}.json"
+    print(f"Saving to: {filename}")
     res_df.to_json(filename)

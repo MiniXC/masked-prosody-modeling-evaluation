@@ -666,8 +666,10 @@ if __name__ == "__main__":
         model_name = 'MPMrandom'
     elif collator_args.use_cwt:
         model_name = 'CWT'
-    else:
+    elif collator_args.mpm:
         model_name = 'MPM'
+    else:
+        model_name = 'inputfeatures'
     if 'linear' in sys.argv[1]:
         classifier_name='linear'
     else:
