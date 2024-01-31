@@ -38,6 +38,15 @@ from util.plotting import plot_prosody_model_ravdess_batch as plot_prosody_model
 from model.ravdess_classifiers import EmotionClassifier
 from collators import get_collator
 
+no_results = {
+        "loss": 100000,
+        "acc": 0,
+        "f1": 0,
+        "f1_micro": 0,
+        "precision": 0,
+        "recall": 0,
+        }
+
 
 def print_and_draw_model():
     dummy_input = model.dummy_input
@@ -118,6 +127,7 @@ def save_checkpoint():
 
 def train_epoch(epoch):
     global global_step
+    eval_results = no_results
     model.train()
     losses = deque(maxlen=training_args.log_every_n_steps)
     step = 0
@@ -171,14 +181,14 @@ def train_epoch(epoch):
         ):
             save_checkpoint()
         if training_args.n_steps is not None and global_step >= training_args.n_steps:
-            return
+            return eval_results
         if (
             training_args.eval_every_n_steps is not None
             and global_step > 0
             and global_step % training_args.eval_every_n_steps == 0
             and accelerator.is_main_process
         ):
-            evaluate()
+            eval_results = evaluate()
             console_rule(f"Epoch {epoch}")
         step += 1
         global_step += 1
@@ -186,6 +196,7 @@ def train_epoch(epoch):
             pbar.update(1)
             if last_loss is not None:
                 pbar.set_postfix({"loss": f"{last_loss:.3f}"})
+    return eval_results
 
 
 def evaluate():
@@ -193,7 +204,7 @@ def evaluate():
     losses = []
     y_true = []
     y_pred = []
-    console_rule("Evaluation")
+    console_rule("Evaluation Start")
     with torch.no_grad():
         for batch in val_dl:
             if not training_args.use_mpm:
@@ -224,17 +235,22 @@ def evaluate():
     f1 = f1_score(y_true, y_pred, average="macro")
     precision = precision_score(y_true, y_pred, average="macro")
     recall = recall_score(y_true, y_pred, average="macro")
-    wandb_log(
-        "val",
-        {
+    
+    eval_results = {
             "loss": loss,
             "acc": acc,
             "f1": f1,
             "f1_micro": f1_score(y_true, y_pred, average="micro"),
             "precision": precision,
             "recall": recall,
-        },
-    )
+            }
+    
+    wandb_log(
+        "val",
+        eval_results,
+        )
+    
+    return eval_results
 
 
 def main():
@@ -319,8 +335,8 @@ def main():
         mask = training_args.mpm_mask_size
         step = training_args.mpm_checkpoint_step
         collator_args.mpm = (
-            # "cdminix/masked_prosody_model"
-            f"checkpoints/fischer_mpm"
+            "cdminix/masked_prosody_model"
+            # f"checkpoints/fischer_mpm"
         )
 
     validate_args(training_args, model_args, collator_args)
@@ -344,10 +360,14 @@ def main():
     console_print(f"[green]val_split[/green]: {training_args.ravdess_val_split}")
 
     train_ds = load_dataset(
-        training_args.ravdess_dataset, split=training_args.ravdess_train_split
+        training_args.ravdess_dataset, 
+        split=training_args.ravdess_train_split,
+        # data_dir=os.environ["RAVDESS_PATH"],
     )
     val_ds = load_dataset(
-        training_args.ravdess_dataset, split=training_args.ravdess_val_split
+        training_args.ravdess_dataset, 
+        split=training_args.ravdess_val_split,
+        # data_dir=os.environ["RAVDESS_PATH"],
     )
 
     console_print(f"[green]train[/green]: {len(train_ds)}")
@@ -444,8 +464,8 @@ def main():
     if training_args.eval_only:
         console_rule("Evaluation")
         seed_everything(training_args.seed)
-        evaluate()
-        return
+        eval_results = evaluate()
+        return eval_results
 
     # training
     console_rule("Training")
@@ -456,13 +476,27 @@ def main():
     console_print(
         f"[green]effective_batch_size[/green]: {training_args.batch_size*accelerator.num_processes}"
     )
+    # Track results
+    best_results = no_results 
+    best_epoch = 0
     pbar = tqdm(total=pbar_total, desc="step")
     for i in range(training_args.n_epochs):
-        train_epoch(i)
+        eval_results = train_epoch(i) 
+        # Track best epoch
+        if eval_results["f1"] > best_results["f1"]:
+            best_results = eval_results
+            best_epoch = i
     console_rule("Evaluation")
     seed_everything(training_args.seed)
-    evaluate()
+    last_results = evaluate()
 
+    # log best results and epoch
+    console_rule(f"Best epoch {best_epoch}")
+    wandb_log(
+        "best_val_results",
+        best_results,
+    )
+    
     # save final model
     console_rule("Saving")
     if training_args.do_save:
@@ -474,7 +508,48 @@ def main():
         console_print(
             f"use \n[magenta]wandb sync {Path(wandb.run.dir).parent}[/magenta]\nto sync offline run"
         )
-
+    
+    return best_epoch, best_results
 
 if __name__ == "__main__":
     main()
+
+    # [WIP] couldn't get a bash script/subprocess to run this so quick fix...
+    from datetime import datetime
+    import pandas as pd
+    import numpy as np
+
+    runs=3
+
+    # Collect runs
+    best_epochs = {}
+    best_results = {}
+    for i in range(runs):
+        best_epoch, best_result = main()
+        best_epochs[i] = best_epoch
+        best_results[i] = best_result
+
+    # Make writable results
+    res_df = pd.DataFrame(best_results).T
+    res_df["best_epoch"] = best_epochs.values()
+    res_df.loc['mean'] = res_df.mean()
+    res_df.loc['std'] = res_df.std()
+    print(res_df.mean())
+
+    # Make save file (so janky, didn't want to change the argparsing structure too much though) 
+    if collator_args.use_mpm_random:
+        model_name = 'MPMrandom'
+    elif collator_args.use_cwt:
+        model_name = 'CWT'
+    elif collator_args.mpm:
+        model_name = 'MPM'
+    else:
+        model_name = 'inputfeatures'
+    if 'linear' in sys.argv[1]:
+        classifier_name='linear'
+    else:
+        classifier_name='conformer'
+    
+    current_datetime = datetime.now().strftime("%Y%m%d_%H%M")
+    filename = f"results/ravdess/{classifier_name}_{model_name}_{current_datetime}.json"
+    res_df.to_json(filename)
