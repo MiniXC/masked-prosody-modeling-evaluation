@@ -130,6 +130,7 @@ setproctitle==1.3.2
 shellingham==1.5.0
 shortuuid==1.0.1
 simple-hifigan @ git+https://github.com/MiniXC/simple_hifigan.git@61f1d15be031c7c3a23cf4c47032d018304bef7e
+speech-collator @ git+https://github.com/MiniXC/speech-collator.git@2f3cbca2e18ee26f472b422a79b37551f4ecfb30
 smmap==3.0.5
 soundfile==0.12.1
 soxr==0.3.6

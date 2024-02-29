@@ -7,6 +7,6 @@ n_layers: 2
 wandb_project: "masked-prosody-modeling-v2-eval"
 wandb_mode: "offline"
 type: "conformer"
-use_mpm: True
-mpm_layer: 5
+use_cwt: True
+cwt_n_bins: 34
 dropout: 0.5

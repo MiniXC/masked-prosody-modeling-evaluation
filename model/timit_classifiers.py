@@ -24,7 +24,10 @@ class PhonemeWordBoundaryClassifier(nn.Module):
 
         if not args.use_mpm:
             self.measures = args.measures.split(",")
-            input_size = len(self.measures) * 2
+            if not args.use_cwt:
+                input_size = len(self.measures) * 2
+            else:
+                input_size = args.cwt_n_bins * 2 * len(self.measures)
         else:
             input_size = 512
 
@@ -126,7 +129,10 @@ class PhonemeWordBoundaryClassifier(nn.Module):
     def dummy_input(self):
         torch.manual_seed(0)
         if not self.args.use_mpm:
-            return torch.randn(1, 384, len(self.measures) * 2)
+            if not self.args.use_cwt:
+                return torch.randn(1, 384, len(self.measures) * 2)
+            else:
+                return torch.randn(1, 384, self.args.cwt_n_bins * 2 * len(self.measures))
         else:
             return torch.randn(1, 384, 512)
 

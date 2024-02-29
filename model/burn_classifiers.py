@@ -26,6 +26,8 @@ class BreakProminenceClassifier(nn.Module):
             input_size = len(self.measures) * args.values_per_word
             if args.use_cwt:
                 input_size = input_size * args.cwt_n_bins
+            # if args.use_paper_cwt:
+            #     pass
         else:
             input_size = 512
 

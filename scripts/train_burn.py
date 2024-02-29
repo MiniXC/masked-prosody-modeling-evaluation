@@ -351,15 +351,21 @@ def main():
         ) = parser.parse_args_into_dataclasses(sys.argv[2:])
         # update args from yaml
         for k, v in args_dict.items():
+            used_args = False
             if hasattr(training_args, k):
                 setattr(training_args, k, v)
+                used_args = True
             if hasattr(model_args, k):
                 setattr(model_args, k, v)
+                used_args = True
             if hasattr(collator_args, k):
                 setattr(collator_args, k, v)
+                used_args = True
+            if not used_args:
+                console_print(f"[yellow]WARNING[/yellow]: unused arg {k} in yaml")
         if len(sys.argv) > 2:
             console_print(
-                f"[yellow]WARNING[/yellow]: yaml args will be override command line args"
+                f"[yellow]WARNING[/yellow]: yaml args will override command line args"
             )
     else:
         (
@@ -553,24 +559,35 @@ def main():
     console_print(
         f"[green]effective_batch_size[/green]: {training_args.batch_size*accelerator.num_processes}"
     )
-    best_results = no_results 
-    best_epoch = 0
+    best_results_prom = no_results 
+    best_epoch_prom = 0
+    best_results_break = no_results 
+    best_epoch_break = 0
     pbar = tqdm(total=pbar_total, desc="step")
     for i in range(training_args.n_epochs):
         eval_results = train_epoch(i)
         # Track best epoch
-        if eval_results["prom_f1_binary"] > best_results["prom_f1_binary"]:
-            best_results = eval_results
-            best_epoch = i
+        if eval_results["prom_f1"] > best_results_prom["prom_f1"]:
+            best_results_prom = eval_results
+            best_epoch_prom = i
+        if eval_results["break_f1"] > best_results_break["break_f1"]:
+            best_results_break = eval_results
+            best_epoch_break = i
+
     console_rule("Evaluation Start")
     seed_everything(training_args.seed)
     last_results = evaluate()
 
     # log best results and epoch
-    console_rule(f"Best epoch {best_epoch}")
+    console_rule(f"Best epoch prom {best_epoch_prom}")
+    console_rule(f"Best epoch break {best_epoch_break}")
     wandb_log(
-        "best_val_results",
-        best_results,
+        "best_val_results_prom",
+        best_results_prom,
+    )
+    wandb_log(
+        "best_val_results_break",
+        best_results_break,
     )
 
     # save final model
@@ -585,48 +602,52 @@ def main():
             f"use \n[magenta]wandb sync {Path(wandb.run.dir).parent}[/magenta]\nto sync offline run"
         )
 
-    return best_epoch, best_results
+    return best_epoch_prom, best_results_prom, best_epoch_break, best_results_break
 
 if __name__ == "__main__":
-    # best_epoch, best_result = main()
+    best_epoch_prom, best_results_prom, best_epoch_break, best_results_break = main()
+    print("prominence...")
+    print(best_epoch_prom, best_results_prom)
+    print("break...")
+    print(best_epoch_break, best_results_break)
 
     # [WIP] couldn't get a bash script/subprocess to run this so quick fix...
-    from datetime import datetime
-    import pandas as pd
-    import numpy as np
+    # from datetime import datetime
+    # import pandas as pd
+    # import numpy as np
 
-    runs=3
+    # runs=1
 
-    # Collect runs
-    best_epochs = {}
-    best_results = {}
-    for i in range(runs):
-        best_epoch, best_result = main()
-        best_epochs[i] = best_epoch
-        best_results[i] = best_result
+    # # Collect runs
+    # best_epochs = {}
+    # best_results = {}
+    # for i in range(runs):
+    #     best_epoch, best_result = main()
+    #     best_epochs[i] = best_epoch
+    #     best_results[i] = best_result
 
-    # Make writable results
-    res_df = pd.DataFrame(best_results).T
-    res_df["best_epoch"] = best_epochs.values()
-    res_df.loc['mean'] = res_df.mean()
-    res_df.loc['std'] = res_df.std()
-    print(res_df.mean())
+    # # Make writable results
+    # res_df = pd.DataFrame(best_results).T
+    # res_df["best_epoch"] = best_epochs.values()
+    # res_df.loc['mean'] = res_df.mean()
+    # res_df.loc['std'] = res_df.std()
+    # print(res_df.mean())
 
-    # Make save file (so janky, didn't want to change the argparsing structure too much though) 
-    if collator_args.use_mpm_random:
-        model_name = 'MPMrandom'
-    elif collator_args.use_cwt:
-        model_name = 'CWT'
-    elif collator_args.mpm:
-        model_name = 'MPM'
-    else:
-        model_name = 'inputfeatures'
-    if 'linear' in sys.argv[1]:
-        classifier_name='linear'
-    else:
-        classifier_name='conformer'
+    # # Make save file (so janky, didn't want to change the argparsing structure too much though) 
+    # if collator_args.use_mpm_random:
+    #     model_name = 'MPMrandom'
+    # elif collator_args.use_cwt:
+    #     model_name = 'CWT'
+    # elif collator_args.mpm:
+    #     model_name = 'MPM'
+    # else:
+    #     model_name = 'inputfeatures'
+    # if 'linear' in sys.argv[1]:
+    #     classifier_name='linear'
+    # else:
+    #     classifier_name='conformer'
     
-    current_datetime = datetime.now().strftime("%Y%m%d_%H%M")
-    filename = f"results/burn/{classifier_name}_{model_name}_{current_datetime}.json"
-    print(f"Saving to: {filename}")
-    res_df.to_json(filename)
+    # current_datetime = datetime.now().strftime("%Y%m%d_%H%M")
+    # filename = f"results/burn/{classifier_name}_{model_name}_{current_datetime}.json"
+    # print(f"Saving to: {filename}")
+    # res_df.to_json(filename)

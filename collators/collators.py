@@ -1337,61 +1337,29 @@ class BaselineTIMITCollator:
                     )
             for measure in results:
                 results[measure].append(measures[measure])
-
-            # fold up measures such the the length is half the original length, but we have an additional dimension
-            for measure in results:
-                if not self.args.use_cwt:
-                    results[measure][-1] = np.array(
-                        [
-                            np.array(
-                                [
-                                    results[measure][-1][i],
-                                    results[measure][-1][i + 1],
-                                ]
-                            )
-                            if i + 1 < len(results[measure][-1])
-                            else np.array(
-                                [
-                                    results[measure][-1][i],
-                                    results[measure][-1][i],
-                                ]
-                            )
-                            for i in range(0, len(results[measure][-1]), 2)
-                        ]
+                # fold up measures such the the length is half the original length, but we have an additional dimension
+                # we got from (n, m) to (n, m/2, 2)
+                arr_1 = results[measure][-1][::2]
+                arr_2 = results[measure][-1][1::2]
+                if arr_1.shape[0] > arr_2.shape[0]:
+                    arr_2 = np.concatenate(
+                        [arr_2, np.zeros((1, arr_2.shape[1]))], axis=0
                     )
-                else:
-                    results[measure][-1] = np.array(
-                        [
-                            np.array(
-                                [
-                                    results[measure][-1][i],
-                                    results[measure][-1][i + 1],
-                                ]
-                            )
-                            if i + 1 < len(results[measure][-1])
-                            else np.array(
-                                [
-                                    results[measure][-1][i],
-                                    results[measure][-1][i],
-                                ]
-                            )
-                            for i in range(0, len(results[measure][-1]), 2)
-                        ]
+                elif arr_1.shape[0] < arr_2.shape[0]:
+                    arr_1 = np.concatenate(
+                        [arr_1, np.zeros((1, arr_1.shape[1]))], axis=0
                     )
-                    results[measure][-1] = np.array(
-                        [
-                            np.array(
-                                [
-                                    interpolate(
-                                        results[measure][-1][i, :, j],
-                                        vocex_len,
-                                    )
-                                    for j in range(results[measure][-1].shape[-1])
-                                ]
-                            )
-                            for i in range(results[measure][-1].shape[0])
-                        ]
-                    )
+                results[measure][-1] = np.stack(
+                    [
+                        arr_1,
+                        arr_2,
+                    ],
+                    axis=-1,
+                )
+                # get rid of the last dimension
+                results[measure][-1] = results[measure][-1].reshape(
+                    results[measure][-1].shape[0], -1
+                )
 
             vocex_len = np.ceil(vocex_len / 2).astype(int)
 
@@ -1432,11 +1400,12 @@ class BaselineTIMITCollator:
 
         # pad measures
         for measure in results:
-            # print([r.shape for r in batch["measures"][measure]])
             batch["measures"][measure] = torch.tensor(
                 np.array(
                     [
                         np.pad(r, ((0, max_len - r.shape[0]), (0, 0)))
+                        if r.shape[0] < max_len
+                        else r[:max_len]
                         for r in batch["measures"][measure]
                     ]
                 )

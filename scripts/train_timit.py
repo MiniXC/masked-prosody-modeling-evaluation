@@ -420,6 +420,9 @@ def main():
             collator_args,
         ) = parser.parse_args_into_dataclasses()
 
+    model_args.use_cwt = collator_args.use_cwt
+    model_args.cwt_n_bins = collator_args.cwt_n_bins
+
     # check if run name is specified
     if training_args.run_name is None:
         raise ValueError("run_name must be specified")

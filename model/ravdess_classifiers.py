@@ -77,6 +77,7 @@ class EmotionClassifier(nn.Module):
                 ),
                 num_layers=args.n_layers,
             )
+            self.weighted_sum = nn.Linear(args.hidden_dim, 1)
             # instead doing mean and max pooling, we can use attention
             # self.attention = nn.Sequential(
             #     nn.Linear(args.hidden_dim, args.hidden_dim),
@@ -129,7 +130,7 @@ class EmotionClassifier(nn.Module):
             # )
             x = torch.cat(
                 [
-                    x.mean(dim=1),
+                    (self.weighted_sum(x) * x).sum(dim=1),
                     x.max(dim=1).values,
                     x_input.mean(dim=1),
                     x_input.max(dim=1).values,
