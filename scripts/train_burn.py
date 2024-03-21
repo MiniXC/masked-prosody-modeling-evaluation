@@ -330,7 +330,7 @@ def evaluate():
     )
     return eval_results
 
-def main():
+def main(multiruns=False):
     global accelerator, training_args, model_args, collator_args, train_dl, val_dl, optimizer, scheduler, model, global_step, pbar
 
     global_step = 0
@@ -410,11 +410,16 @@ def main():
     collator_args.values_per_word = model_args.values_per_word
     collator_args.measures = model_args.measures
 
+    # Update overwrite specifically if multiruns is true (avoid recomputing features for multiple inits of the probe)
+    if multiruns == True:
+        training_args.overwrite_data = False
+    # Update args from commandine args (training_args)
     model_args.use_mpm = training_args.use_mpm
     model_args.use_cwt = collator_args.use_cwt
     model_args.use_mpm_init = training_args.use_mpm
     model_args.cwt_n_bins = collator_args.cwt_n_bins
     collator_args.overwrite = training_args.overwrite_data
+    
     if training_args.use_mpm:
         collator_args.name = collator_args.name.replace("default", "prosody_model")
         bins = training_args.mpm_bin_size
@@ -605,49 +610,66 @@ def main():
     return best_epoch_prom, best_results_prom, best_epoch_break, best_results_break
 
 if __name__ == "__main__":
-    best_epoch_prom, best_results_prom, best_epoch_break, best_results_break = main()
-    print("prominence...")
-    print(best_epoch_prom, best_results_prom)
-    print("break...")
-    print(best_epoch_break, best_results_break)
+    # best_epoch_prom, best_results_prom, best_epoch_break, best_results_break = main()
+    # print("prominence...")
+    # print(best_epoch_prom, best_results_prom)
+    # print("break...")
+    # print(best_epoch_break, best_results_break)
 
     # [WIP] couldn't get a bash script/subprocess to run this so quick fix...
-    # from datetime import datetime
-    # import pandas as pd
-    # import numpy as np
+    from datetime import datetime
+    import pandas as pd
+    import numpy as np
 
-    # runs=1
+    runs=3
 
-    # # Collect runs
-    # best_epochs = {}
-    # best_results = {}
-    # for i in range(runs):
-    #     best_epoch, best_result = main()
-    #     best_epochs[i] = best_epoch
-    #     best_results[i] = best_result
+    # Collect runs
+    best_epochs_prom = {}
+    best_results_prom = {}
+    best_epochs_break = {}
+    best_results_break = {}
+    multiruns = False
+    for i in range(runs):
+        # only overwrite features once for multiruns (i.e., different inits of the probe) 
+        if i>0:
+            multiruns = True
+        best_epoch_prom, best_result_prom, best_epoch_break, best_result_break = main(multiruns=multiruns)
+        best_epochs_prom[i] = best_epoch_prom
+        best_results_prom[i] = best_result_prom
+        best_epochs_break[i] = best_epoch_break
+        best_results_break[i] = best_result_break
 
-    # # Make writable results
-    # res_df = pd.DataFrame(best_results).T
-    # res_df["best_epoch"] = best_epochs.values()
-    # res_df.loc['mean'] = res_df.mean()
-    # res_df.loc['std'] = res_df.std()
-    # print(res_df.mean())
+    # Make writable results
+    res_prom_df = pd.DataFrame(best_results_prom).T
+    res_prom_df["best_epoch"] = best_epochs_prom.values()
+    res_prom_df.loc['mean'] = res_prom_df.mean()
+    res_prom_df.loc['std'] = res_prom_df.std()
+    print(res_prom_df.mean())
 
-    # # Make save file (so janky, didn't want to change the argparsing structure too much though) 
-    # if collator_args.use_mpm_random:
-    #     model_name = 'MPMrandom'
-    # elif collator_args.use_cwt:
-    #     model_name = 'CWT'
-    # elif collator_args.mpm:
-    #     model_name = 'MPM'
-    # else:
-    #     model_name = 'inputfeatures'
-    # if 'linear' in sys.argv[1]:
-    #     classifier_name='linear'
-    # else:
-    #     classifier_name='conformer'
+    res_break_df = pd.DataFrame(best_results_break).T
+    res_break_df["best_epoch"] = best_epochs_break.values()
+    res_break_df.loc['mean'] = res_break_df.mean()
+    res_break_df.loc['std'] = res_break_df.std()
+    print(res_break_df.mean())
+
+    # Make save file (so janky, didn't want to change the argparsing structure too much though) 
+    if collator_args.use_mpm_random:
+        model_name = 'MPMrandom'
+    elif collator_args.use_cwt:
+        model_name = 'CWT'
+    elif collator_args.mpm:
+        model_name = 'MPM'
+    else:
+        model_name = 'inputfeatures'
+    if 'linear' in sys.argv[1]:
+        classifier_name='linear'
+    else:
+        classifier_name='conformer'
     
-    # current_datetime = datetime.now().strftime("%Y%m%d_%H%M")
-    # filename = f"results/burn/{classifier_name}_{model_name}_{current_datetime}.json"
-    # print(f"Saving to: {filename}")
-    # res_df.to_json(filename)
+    current_datetime = datetime.now().strftime("%Y%m%d_%H%M")
+    filename = f"results/burn_prominence/{classifier_name}_{model_name}_{current_datetime}.json"
+    print(f"Saving to: {filename}")
+    res_prom_df.to_json(filename)
+    filename = f"results/burn_break/{classifier_name}_{model_name}_{current_datetime}.json"
+    print(f"Saving to: {filename}")
+    res_break_df.to_json(filename)

@@ -382,7 +382,7 @@ def evaluate_loss_only():
     )
 
 
-def main():
+def main(multiruns=False):
     global accelerator, training_args, model_args, collator_args, train_dl, val_dl, optimizer, scheduler, model, global_step, pbar
 
     global_step = 0
@@ -457,6 +457,11 @@ def main():
             }
         )
     collator_args.measures = model_args.measures
+
+    # Update overwrite specifically if multiruns is true (avoid recomputing features for multiple inits of the probe)
+    if multiruns == True:
+        training_args.overwrite_data = False
+    # Update args from commandine args (training_args)
     model_args.use_mpm = training_args.use_mpm
     collator_args.overwrite = training_args.overwrite_data
     if training_args.use_mpm:
@@ -652,8 +657,12 @@ if __name__ == "__main__":
     # Collect runs
     best_epochs = {}
     best_results = {}
+    multiruns = False
     for i in range(runs):
-        best_epoch, best_result = main()
+        # only overwrite features once for multiruns (i.e., different inits of the probe) 
+        if i>0:
+            multiruns = True
+        best_epoch, best_result = main(multiruns=multiruns)
         best_epochs[i] = best_epoch
         best_results[i] = best_result
 
