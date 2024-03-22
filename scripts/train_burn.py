@@ -572,10 +572,10 @@ def main(multiruns=False):
     for i in range(training_args.n_epochs):
         eval_results = train_epoch(i)
         # Track best epoch
-        if eval_results["prom_f1"] > best_results_prom["prom_f1"]:
+        if eval_results["prom_f1_binary"] > best_results_prom["prom_f1_binary"]:
             best_results_prom = eval_results
             best_epoch_prom = i
-        if eval_results["break_f1"] > best_results_break["break_f1"]:
+        if eval_results["break_f1_binary"] > best_results_break["break_f1_binary"]:
             best_results_break = eval_results
             best_epoch_break = i
 
